@@ -41,3 +41,6 @@ app-example
 # generated native folders
 /ios
 /android
+
+# Backend PHP (tiene su propio repo en github.com/Ramosssssssssss/krkn-app-backend)
+backend/
