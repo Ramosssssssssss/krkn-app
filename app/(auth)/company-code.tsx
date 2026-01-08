@@ -8,18 +8,18 @@ import { StatusBar } from 'expo-status-bar';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Animated,
-  Dimensions,
-  KeyboardAvoidingView,
-  Linking,
-  Modal,
-  Platform,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Animated,
+    Dimensions,
+    KeyboardAvoidingView,
+    Linking,
+    Modal,
+    Platform,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 const videoSource = require('@/assets/video.mp4');
@@ -87,15 +87,27 @@ export default function CompanyCodeScreen() {
     setIsLoading(true);
     setError('');
 
-    await new Promise(resolve => setTimeout(resolve, 800));
+    try {
+      // Consultar API para obtener empresa y sus BDs (usando query string)
+      const code = companyCode.trim().toUpperCase();
+      const response = await fetch(`https://app.krkn.mx/api/get-databases.php?companyCode=${encodeURIComponent(code)}`, {
+        method: 'GET',
+      });
 
-    const isValid = companyCode.length >= 3;
+      const data = await response.json();
 
-    if (isValid) {
-      saveCompanyCode(companyCode);
-      router.push('/(auth)/login');
-    } else {
-      setError('Código no encontrado');
+      if (data.ok && data.databases) {
+        // Guardar company code y databases en contexto
+        saveCompanyCode(companyCode.trim().toUpperCase(), data.company, data.databases);
+        router.push('/(auth)/login');
+      } else {
+        setError(data.message || 'Código de empresa no encontrado');
+      }
+    } catch (error) {
+      console.error('Error validando empresa:', error);
+      setError('Error de conexión. Verifica tu internet.');
+    } finally {
+      setIsLoading(false);
     }
 
     setIsLoading(false);

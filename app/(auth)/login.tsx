@@ -6,27 +6,28 @@ import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Animated,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Animated,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [showDatabaseSelector, setShowDatabaseSelector] = useState(false);
   
-  const { companyCode, login } = useAuth();
+  const { companyCode, company, databases, selectedDatabase, selectDatabase, login } = useAuth();
   const { isDark, toggleTheme } = useTheme();
 
   // Animations
@@ -61,8 +62,13 @@ export default function LoginScreen() {
   };
 
   const handleLogin = async () => {
-    if (!email.trim() || !password.trim()) {
+    if (!username.trim() || !password.trim()) {
       setError('Completa todos los campos');
+      return;
+    }
+
+    if (!selectedDatabase) {
+      setError('Selecciona una base de datos');
       return;
     }
 
@@ -70,15 +76,22 @@ export default function LoginScreen() {
     setError('');
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 800));
-      const success = await login(email, password);
-      if (success) {
+      const response = await fetch(`https://app.krkn.mx/api/login.php?companyCode=${companyCode}&databaseId=${selectedDatabase.id}&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`, {
+        method: 'GET',
+      });
+
+      const data = await response.json();
+
+      if (data.ok) {
+        // Guardar usuario y token en el contexto
+        await login(data.user, data.token, data.database);
         router.replace('/(main)');
       } else {
-        setError('Credenciales incorrectas');
+        setError(data.message || 'Credenciales incorrectas');
       }
     } catch (e) {
-      setError('Error al iniciar sesión');
+      console.error('Error en login:', e);
+      setError('Error de conexión. Verifica tu internet.');
     }
 
     setIsLoading(false);
@@ -141,6 +154,28 @@ export default function LoginScreen() {
               <View style={[styles.line, { backgroundColor: theme.border }]} />
             </View>
 
+            {/* Database Selector */}
+            {databases && databases.length > 0 && (
+              <TouchableOpacity
+                style={[styles.databaseSelector, { 
+                  backgroundColor: theme.surface, 
+                  borderColor: selectedDatabase ? theme.accent : theme.border 
+                }]}
+                onPress={() => setShowDatabaseSelector(true)}
+              >
+                <View style={styles.databaseInfo}>
+                  <Ionicons name="server-outline" size={20} color={selectedDatabase ? theme.accent : theme.textMuted} />
+                  <View style={styles.databaseText}>
+                    <Text style={[styles.databaseLabel, { color: theme.textMuted }]}>Base de datos</Text>
+                    <Text style={[styles.databaseName, { color: theme.text }]}>
+                      {selectedDatabase ? selectedDatabase.nombre : 'Selecciona una base de datos'}
+                    </Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={theme.textMuted} />
+              </TouchableOpacity>
+            )}
+
             <Text style={[styles.title, { color: theme.text }]}>Bienvenido</Text>
             <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
               Ingresa tus credenciales
@@ -156,14 +191,14 @@ export default function LoginScreen() {
                 style={styles.cardGlow}
               />
 
-              {/* Email */}
+              {/* Username */}
               <View style={[
                 styles.inputBox, 
                 { 
                   backgroundColor: theme.inputBg,
-                  borderColor: focusedField === 'email' 
+                  borderColor: focusedField === 'username' 
                     ? theme.accent 
-                    : error && !email.trim() 
+                    : error && !username.trim()
                       ? '#EF4444' 
                       : theme.border,
                 }
@@ -171,14 +206,13 @@ export default function LoginScreen() {
                 <Ionicons name="mail-outline" size={18} color={theme.textMuted} />
                 <TextInput
                   style={[styles.input, { color: theme.text }]}
-                  placeholder="Correo electrónico"
+                  placeholder="Usuario"
                   placeholderTextColor={theme.textMuted}
-                  value={email}
-                  onChangeText={(text) => { setEmail(text); setError(''); }}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
+                  value={username}
+                  onChangeText={(text) => { setUsername(text); setError(''); }}
+                  autoCapitalize="characters"
                   editable={!isLoading}
-                  onFocus={() => setFocusedField('email')}
+                  onFocus={() => setFocusedField('username')}
                   onBlur={() => setFocusedField(null)}
                 />
               </View>
@@ -229,13 +263,13 @@ export default function LoginScreen() {
 
               {/* Login Button */}
               <TouchableOpacity
-                style={[styles.btn, (!email.trim() || !password.trim() || isLoading) && styles.btnDisabled]}
+                style={[styles.btn, (!username.trim() || !password.trim() || isLoading) && styles.btnDisabled]}
                 onPress={handleLogin}
-                disabled={!email.trim() || !password.trim() || isLoading}
+                disabled={!username.trim() || !password.trim() || isLoading}
                 activeOpacity={0.8}
               >
                 <LinearGradient
-                  colors={(!email.trim() || !password.trim() || isLoading) 
+                  colors={(!username.trim() || !password.trim() || isLoading) 
                     ? [isDark ? '#1C1326' : '#E5E5E5', isDark ? '#1C1326' : '#E5E5E5']
                     : [theme.accent, theme.accentDark]
                   }
@@ -249,14 +283,14 @@ export default function LoginScreen() {
                     <>
                       <Text style={[
                         styles.btnText,
-                        { color: (!email.trim() || !password.trim()) ? theme.textMuted : '#fff' }
+                        { color: (!username.trim() || !password.trim()) ? theme.textMuted : '#fff' }
                       ]}>
                         Entrar
                       </Text>
                       <Ionicons 
                         name="arrow-forward" 
                         size={18} 
-                        color={(!email.trim() || !password.trim()) ? theme.textMuted : '#fff'} 
+                        color={(!username.trim() || !password.trim()) ? theme.textMuted : '#fff'} 
                       />
                     </>
                   )}
@@ -270,6 +304,60 @@ export default function LoginScreen() {
 
       {/* Footer */}
       <Text style={[styles.footer, { color: theme.textMuted }]}>© 2026 KRKN Systems</Text>
+
+      {/* Database Selector Modal */}
+      {showDatabaseSelector && (
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity 
+            style={styles.modalBackdrop} 
+            activeOpacity={1}
+            onPress={() => setShowDatabaseSelector(false)}
+          />
+          <View style={[styles.modalContent, { backgroundColor: theme.surface }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Selecciona una base de datos</Text>
+              <TouchableOpacity onPress={() => setShowDatabaseSelector(false)}>
+                <Ionicons name="close" size={24} color={theme.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.databaseList}>
+              {databases.map((db) => (
+                <TouchableOpacity
+                  key={db.id}
+                  style={[
+                    styles.databaseItem,
+                    { 
+                      backgroundColor: selectedDatabase?.id === db.id ? `${theme.accent}15` : theme.inputBg,
+                      borderColor: selectedDatabase?.id === db.id ? theme.accent : theme.border,
+                    }
+                  ]}
+                  onPress={() => {
+                    selectDatabase(db);
+                    setShowDatabaseSelector(false);
+                  }}
+                >
+                  <View style={styles.databaseItemContent}>
+                    <Ionicons 
+                      name={selectedDatabase?.id === db.id ? "radio-button-on" : "radio-button-off"} 
+                      size={22} 
+                      color={selectedDatabase?.id === db.id ? theme.accent : theme.textMuted} 
+                    />
+                    <View style={styles.databaseItemText}>
+                      <Text style={[styles.dbName, { color: theme.text }]}>{db.nombre}</Text>
+                      <Text style={[styles.dbServer, { color: theme.textMuted }]}>
+                        {db.ip_servidor}:{db.puerto_bd}
+                      </Text>
+                    </View>
+                  </View>
+                  {selectedDatabase?.id === db.id && (
+                    <Ionicons name="checkmark-circle" size={20} color={theme.accent} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -418,5 +506,98 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 12,
     paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+  },
+  // Database Selector
+  databaseSelector: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  databaseInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  databaseText: {
+    flex: 1,
+  },
+  databaseLabel: {
+    fontSize: 11,
+    marginBottom: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  databaseName: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  // Modal
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'flex-end',
+  },
+  modalBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalContent: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    maxHeight: '70%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  databaseList: {
+    maxHeight: 400,
+  },
+  databaseItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+  },
+  databaseItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  databaseItemText: {
+    flex: 1,
+  },
+  dbName: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  dbServer: {
+    fontSize: 12,
   },
 });
