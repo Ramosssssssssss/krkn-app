@@ -1,4 +1,4 @@
-import { useTheme } from '@/context/theme-context';
+import { useThemeColors } from '@/context/theme-context';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useRef, useState } from 'react';
 import { Animated, StyleSheet, TouchableOpacity, Vibration } from 'react-native';
@@ -10,15 +10,10 @@ interface ScanHeaderProps {
 }
 
 export default function ScanHeader({ color, aggressiveScan, onToggleScan }: ScanHeaderProps) {
-  const { isDark } = useTheme();
+  const colors = useThemeColors();
   const zapAnim = useRef(new Animated.Value(1)).current;
   const zapFlashAnim = useRef(new Animated.Value(0)).current;
   const [showZapFlash, setShowZapFlash] = useState(false);
-
-  const theme = {
-    border: isDark ? '#1C1326' : '#E8E8E8',
-    textSecondary: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)',
-  };
 
   const handleZapPress = () => {
     // Mostrar destello
@@ -70,7 +65,7 @@ export default function ScanHeader({ color, aggressiveScan, onToggleScan }: Scan
         style={[
           styles.headerScanToggle,
           {
-            borderColor: aggressiveScan ? color : theme.border,
+            borderColor: aggressiveScan ? color : colors.border,
             backgroundColor: 'transparent',
           },
         ]}
@@ -81,7 +76,7 @@ export default function ScanHeader({ color, aggressiveScan, onToggleScan }: Scan
           <Ionicons
             name={aggressiveScan ? 'flash' : 'flash-outline'}
             size={16}
-            color={aggressiveScan ? color : theme.textSecondary}
+            color={aggressiveScan ? color : colors.textSecondary}
           />
         </Animated.View>
       </TouchableOpacity>

@@ -3,6 +3,9 @@
  * Incluye validación de códigos, resolución de roles y envío de recepción
  */
 
+import { API_CONFIG } from '@/config/api'
+import { getCurrentDatabaseId } from '@/services/api'
+
 import type {
     CodigosAlternosResult,
     RecepcionPayload,
@@ -16,7 +19,7 @@ import type {
 
 /**
  * Resuelve un código de PANAM consultando la BD
- * @param baseURL - URL base del servidor
+ * @param baseURL - URL base del servidor (legacy, ya no se usa)
  * @param codigo - Código NoIdentificacion del XML
  * @returns Datos del artículo si existe
  */
@@ -25,7 +28,13 @@ export async function resolverCodigoPanam(
   codigo: string
 ): Promise<ResolveRoleResponse> {
   try {
-    const url = `${baseURL}/resolve-role?noid=${encodeURIComponent(codigo)}&provider=panam`
+    // Usar el nuevo endpoint PHP con databaseId
+    const databaseId = getCurrentDatabaseId()
+    if (!databaseId) {
+      return { ok: false, message: 'No hay base de datos seleccionada' }
+    }
+
+    const url = `${API_CONFIG.BASE_URL}/api/resolve-role.php?noid=${encodeURIComponent(codigo)}&provider=panam&databaseId=${databaseId}`
     
     const response = await fetch(url, {
       method: 'GET',
@@ -51,8 +60,8 @@ export async function resolverCodigoPanam(
 }
 
 /**
- * Resuelve múltiples códigos PANAM en paralelo
- * @param baseURL - URL base del servidor
+ * Resuelve múltiples códigos PANAM en UNA SOLA petición (batch)
+ * @param baseURL - URL base del servidor (legacy, ya no se usa)
  * @param codigos - Array de códigos a resolver
  * @returns Map de código -> respuesta
  */
@@ -63,21 +72,65 @@ export async function resolverCodigosPanamBatch(
   const resultados = new Map<string, ResolveRoleResponse>()
   const codigosUnicos = [...new Set(codigos)]
   
-  // Procesar en lotes de 10 para no saturar el servidor
-  const BATCH_SIZE = 10
+  if (codigosUnicos.length === 0) {
+    return resultados
+  }
   
-  for (let i = 0; i < codigosUnicos.length; i += BATCH_SIZE) {
-    const batch = codigosUnicos.slice(i, i + BATCH_SIZE)
+  try {
+    const databaseId = getCurrentDatabaseId()
+    if (!databaseId) {
+      // Si no hay databaseId, marcar todos como no encontrados
+      for (const codigo of codigosUnicos) {
+        resultados.set(codigo, { ok: false, message: 'No hay base de datos seleccionada' })
+      }
+      return resultados
+    }
     
-    const promesas = batch.map(async (codigo) => {
-      const resultado = await resolverCodigoPanam(baseURL, codigo)
-      return { codigo, resultado }
+    const url = `${API_CONFIG.BASE_URL}/api/resolve-role-batch.php`
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        codigos: codigosUnicos,
+        provider: 'panam',
+        databaseId,
+      }),
     })
     
-    const resultadosBatch = await Promise.all(promesas)
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`)
+    }
     
-    for (const { codigo, resultado } of resultadosBatch) {
-      resultados.set(codigo, resultado)
+    const data = await response.json()
+    
+    if (data.ok && data.resultados) {
+      // Mapear resultados
+      for (const codigo of codigosUnicos) {
+        const resultado = data.resultados[codigo]
+        if (resultado) {
+          resultados.set(codigo, {
+            ok: resultado.ok === true,
+            claveArticulo: resultado.claveArticulo,
+            role: resultado.role,
+            message: resultado.message,
+          })
+        } else {
+          resultados.set(codigo, { ok: false, message: 'Sin respuesta' })
+        }
+      }
+    } else {
+      // Error general, marcar todos como no encontrados
+      for (const codigo of codigosUnicos) {
+        resultados.set(codigo, { ok: false, message: data.message || 'Error en batch' })
+      }
+    }
+    
+  } catch (error) {
+    console.error('Error en batch PANAM:', error)
+    // En caso de error, marcar todos como no encontrados
+    for (const codigo of codigosUnicos) {
+      resultados.set(codigo, { ok: false, message: 'Error de conexión' })
     }
   }
   
@@ -90,16 +143,23 @@ export async function resolverCodigosPanamBatch(
 
 /**
  * Consulta la clave Microsip para un código largo (CACHORRO)
- * @param baseURL - URL base del servidor
+ * Usa nuestro endpoint PHP que consulta la tabla CODIGO_ALTERNO
+ * 
+ * @param _baseURL - URL base del servidor (legacy, se ignora)
  * @param codigoLargo - Código largo escaneado
  * @returns Clave Microsip si existe
  */
 export async function consultarClaveMicrosip(
-  baseURL: string,
+  _baseURL: string,
   codigoLargo: string
 ): Promise<{ ok: boolean; claveMicrosip?: string }> {
   try {
-    const url = `${baseURL}/buscar-clave-microsip?codigo=${encodeURIComponent(codigoLargo)}`
+    const databaseId = getCurrentDatabaseId()
+    if (!databaseId) {
+      return { ok: false }
+    }
+    
+    const url = `${API_CONFIG.BASE_URL}/api/codigo-largo.php?codigo=${encodeURIComponent(codigoLargo)}&databaseId=${databaseId}`
     
     const response = await fetch(url, {
       method: 'GET',
@@ -114,7 +174,7 @@ export async function consultarClaveMicrosip(
     
     return {
       ok: data.ok === true,
-      claveMicrosip: data.claveMicrosip || data.clave_microsip,
+      claveMicrosip: data.claveMicrosip,
     }
   } catch (error) {
     console.error('Error consultando clave Microsip:', error)
@@ -124,12 +184,14 @@ export async function consultarClaveMicrosip(
 
 /**
  * Carga códigos alternos desde la BD para productos Cachorro
- * @param baseURL - URL base del servidor
+ * Usa nuestro endpoint PHP que consulta la tabla CODIGO_ALTERNO
+ * 
+ * @param _baseURL - URL base del servidor (legacy, se ignora)
  * @param codigosXML - Lista de códigos originales del XML
  * @returns Mapas de relaciones entre códigos
  */
 export async function cargarCodigosAlternosBatch(
-  baseURL: string,
+  _baseURL: string,
   codigosXML: string[]
 ): Promise<CodigosAlternosResult> {
   const codigosMap = new Map<string, string>()
@@ -138,13 +200,22 @@ export async function cargarCodigosAlternosBatch(
   let totalCargados = 0
   
   try {
-    // Llamar endpoint que devuelve todos los códigos alternos
-    const url = `${baseURL}/codigos-alternos-batch`
+    const databaseId = getCurrentDatabaseId()
+    if (!databaseId) {
+      console.error('No hay databaseId seleccionado')
+      return { codigosMap, largoToXmlMap, skuToXmlMap, totalCargados }
+    }
+    
+    // Usar nuestro endpoint PHP
+    const url = `${API_CONFIG.BASE_URL}/api/codigos-alternos-batch.php`
     
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ codigos: codigosXML }),
+      body: JSON.stringify({ 
+        codigos: codigosXML,
+        databaseId,
+      }),
     })
     
     if (!response.ok) {
@@ -159,20 +230,28 @@ export async function cargarCodigosAlternosBatch(
       for (const item of data.alternos) {
         const { codigoXML, codigoLargo, claveMicrosip } = item
         
-        if (codigoLargo && claveMicrosip) {
-          codigosMap.set(codigoLargo, claveMicrosip)
+        // Normalizar claves a mayúsculas para búsqueda consistente
+        const codigoLargoUpper = (codigoLargo || '').toUpperCase().trim()
+        const claveMicrosipUpper = (claveMicrosip || '').toUpperCase().trim()
+        const codigoXMLUpper = (codigoXML || '').toUpperCase().trim()
+        
+        if (codigoLargoUpper && claveMicrosip) {
+          // Guardar con clave normalizada pero valor original (para mostrar/enviar)
+          codigosMap.set(codigoLargoUpper, claveMicrosip)
           totalCargados++
         }
         
-        if (codigoLargo && codigoXML) {
-          largoToXmlMap.set(codigoLargo, codigoXML)
+        if (codigoLargoUpper && codigoXML) {
+          largoToXmlMap.set(codigoLargoUpper, codigoXML)
         }
         
-        if (claveMicrosip && codigoXML) {
-          skuToXmlMap.set(claveMicrosip, codigoXML)
+        if (claveMicrosipUpper && codigoXML) {
+          skuToXmlMap.set(claveMicrosipUpper, codigoXML)
         }
       }
     }
+    
+    console.log(`📦 Códigos alternos: ${totalCargados} cargados de ${codigosXML.length} solicitados`)
   } catch (error) {
     console.error('Error cargando códigos alternos:', error)
   }
@@ -225,28 +304,52 @@ export async function validarCodigosEnBase(
 
 /**
  * Envía la recepción completa al servidor
- * @param baseURL - URL base del servidor
+ * @param baseURL - URL base del servidor (legacy, se ignora)
  * @param payload - Datos de la recepción
  * @returns Resultado con folio generado
  */
 export async function enviarRecepcion(
-  baseURL: string,
+  _baseURL: string,
   payload: RecepcionPayload
 ): Promise<RecepcionResponse> {
   try {
-    const url = `${baseURL}/recepcion-xml`
+    const databaseId = getCurrentDatabaseId()
+    if (!databaseId) {
+      return { ok: false, message: 'No hay base de datos seleccionada' }
+    }
+    
+    const url = `${API_CONFIG.BASE_URL}/api/recibo-xml.php`
+    
+    // Agregar databaseId al payload
+    const fullPayload = {
+      ...payload,
+      databaseId,
+    }
+    
+    console.log('📤 Enviando a recibo-xml.php:', JSON.stringify(fullPayload, null, 2))
     
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(fullPayload),
     })
     
-    if (!response.ok) {
-      return { ok: false, message: `HTTP ${response.status}` }
+    // Intentar leer el body aunque sea error
+    const text = await response.text()
+    console.log('📥 Respuesta raw:', text)
+    
+    let data: any
+    try {
+      data = JSON.parse(text)
+    } catch {
+      return { ok: false, message: `Error ${response.status}: ${text.substring(0, 200)}` }
     }
     
-    const data = await response.json()
+    if (!response.ok) {
+      return { ok: false, message: data.message || `HTTP ${response.status}` }
+    }
+    
+    console.log('📥 Respuesta recibo-xml.php:', data)
     
     return {
       ok: data.ok === true,
@@ -313,3 +416,133 @@ export async function buscarArticulo(
     return { ok: false }
   }
 }
+
+// ============================================
+// CREAR ARTÍCULO
+// ============================================
+
+import type { CrearArticuloPayload, CrearArticuloResponse, LineaArticulo } from '../types/xml'
+
+/**
+ * Obtiene las líneas de artículos para el dropdown
+ */
+export async function obtenerLineasArticulos(): Promise<LineaArticulo[]> {
+  try {
+    const databaseId = getCurrentDatabaseId()
+    if (!databaseId) return []
+    
+    const url = `${API_CONFIG.BASE_URL}/api/lineas-articulos.php?databaseId=${databaseId}`
+    
+    const response = await fetch(url)
+    
+    if (!response.ok) return []
+    
+    const data = await response.json()
+    
+    if (data.ok && data.lineas) {
+      return data.lineas.map((l: any) => ({
+        id: l.LINEA_ARTICULO_ID,
+        nombre: l.NOMBRE
+      }))
+    }
+    return []
+  } catch (error) {
+    console.error('Error obteniendo líneas:', error)
+    return []
+  }
+}
+
+/**
+ * Crea un artículo nuevo en la BD
+ */
+export async function crearArticulo(
+  payload: Omit<CrearArticuloPayload, 'databaseId'>
+): Promise<CrearArticuloResponse> {
+  try {
+    const databaseId = getCurrentDatabaseId()
+    if (!databaseId) {
+      return { ok: false, message: 'No hay base de datos seleccionada' }
+    }
+    
+    const url = `${API_CONFIG.BASE_URL}/api/crear-articulo.php`
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...payload,
+        databaseId,
+      }),
+    })
+    
+    // Obtener el texto primero para debug
+    const text = await response.text()
+    
+    if (!text || text.trim() === '') {
+      return { ok: false, message: 'Respuesta vacía del servidor' }
+    }
+    
+    // Intentar parsear JSON
+    let data
+    try {
+      data = JSON.parse(text)
+    } catch (parseError) {
+      console.error('Error parseando respuesta:', text.substring(0, 500))
+      return { ok: false, message: 'Error en respuesta del servidor: ' + text.substring(0, 100) }
+    }
+    
+    return {
+      ok: data.ok === true,
+      message: data.message || 'Error desconocido',
+      clave: data.clave,
+      codigoBarras: data.codigoBarras,
+    }
+  } catch (error) {
+    console.error('Error creando artículo:', error)
+    return { ok: false, message: 'Error de conexión' }
+  }
+}
+
+// ============================================
+// CATÁLOGOS: Marcas, Proveedores, Tallas
+// ============================================
+
+export interface CatalogoItem {
+  id: number
+  nombre: string
+}
+
+export interface CatalogosResult {
+  ok: boolean
+  marcas?: CatalogoItem[]
+  proveedores?: CatalogoItem[]
+  tallas?: CatalogoItem[]
+}
+
+/**
+ * Obtiene catálogos de marcas, proveedores y tallas
+ */
+export async function obtenerCatalogosArticulos(): Promise<CatalogosResult> {
+  try {
+    const databaseId = getCurrentDatabaseId()
+    if (!databaseId) {
+      return { ok: false }
+    }
+
+    const url = `${API_CONFIG.BASE_URL}/api/catalogos-articulos.php?tipo=all&databaseId=${databaseId}`
+    
+    const response = await fetch(url)
+    const data = await response.json()
+    
+    return {
+      ok: data.ok === true,
+      marcas: data.marcas || [],
+      proveedores: data.proveedores || [],
+      tallas: data.tallas || [],
+    }
+  } catch (error) {
+    console.error('Error obteniendo catálogos:', error)
+    return { ok: false }
+  }
+}
+

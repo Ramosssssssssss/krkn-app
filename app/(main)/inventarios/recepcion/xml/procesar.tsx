@@ -10,27 +10,27 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    BackHandler,
-    FlatList,
-    Modal,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    Vibration,
-    View,
+  ActivityIndicator,
+  Alert,
+  Animated,
+  BackHandler,
+  FlatList,
+  Modal,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Vibration,
+  View,
 } from 'react-native'
 
 // Tipos
 import type {
-    CachorroTallasMap,
-    ProductoXML,
-    ProveedorXML,
-    XMLMeta,
+  CachorroTallasMap,
+  ProductoXML,
+  ProveedorXML,
+  XMLMeta,
 } from '../types/xml'
 
 // Utils
@@ -39,14 +39,12 @@ import { normalizarCodigo } from '../utils/xml-parser'
 
 // Providers
 import {
-    convertirADetallesCachorro,
-    convertirADetallesMundo,
-    convertirADetallesPanam,
-    procesarEscaneoCachorro,
-    registrarTallaEscaneada,
+  convertirADetallesMundo,
+  convertirADetallesPanam,
+  procesarEscaneoCachorro,
+  registrarTallaEscaneada
 } from '../providers'
 
-const RECEPCION_COLOR = '#1565C0'
 const STORAGE_KEY = '@xml_draft'
 
 export default function ProcesarXMLScreen() {
@@ -264,7 +262,18 @@ export default function ProcesarXMLScreen() {
         let newPacked = pk < req ? pk + 1 : pk
         let newScanned = sc < req ? sc + 1 : sc
         
-        const updated = { ...item, packed: newPacked, scanned: newScanned }
+        // Incrementar contador de clave Microsip escaneada
+        const clavesMicrosip = { ...(item._clavesMicrosipAsignadas || {}) }
+        if (claveMicrosip) {
+          clavesMicrosip[claveMicrosip] = (clavesMicrosip[claveMicrosip] || 0) + 1
+        }
+        
+        const updated = { 
+          ...item, 
+          packed: newPacked, 
+          scanned: newScanned,
+          _clavesMicrosipAsignadas: clavesMicrosip
+        }
         
         // Mover al inicio
         next.splice(idx, 1)
@@ -366,25 +375,51 @@ export default function ProcesarXMLScreen() {
     
     try {
       // Convertir a detalles según proveedor
-      let detalles
+      let detalles: Array<{ CLAVE: string; CANTIDAD: number; COSTO_UNITARIO?: number }>
+      
       if (isCachorro) {
-        detalles = convertirADetallesCachorro(productos, cachorroTallas, requireScan)
+        // Para Cachorro: usar las claves Microsip escaneadas directamente
+        detalles = []
+        for (const producto of productos) {
+          if (producto._clavesMicrosipAsignadas) {
+            // Cada entrada es [claveMicrosip, cantidadEscaneada]
+            for (const [claveMicrosip, cantidad] of Object.entries(producto._clavesMicrosipAsignadas)) {
+              if (cantidad > 0) {
+                detalles.push({
+                  CLAVE: claveMicrosip,
+                  CANTIDAD: cantidad,
+                  COSTO_UNITARIO: producto.VALOR_UNITARIO || 0,
+                })
+              }
+            }
+          }
+        }
+        
+        console.log('📦 Detalles Cachorro (claves Microsip):', detalles.length, 'líneas')
+        console.log(detalles.map(d => `${d.CLAVE}: ${d.CANTIDAD}`).join(', '))
+        
       } else if (proveedor === 'panam') {
         detalles = convertirADetallesPanam(productos, requireScan)
       } else {
         detalles = convertirADetallesMundo(productos, requireScan)
       }
       
-      // Validar códigos
-      const codigos = detalles.map(d => d.CLAVE)
-      const validacion = await API.validarCodigosEnBase(baseURL, codigos)
-      
-      if (!validacion.ok && validacion.codigosNoEncontrados?.length) {
-        const lista = validacion.codigosNoEncontrados.slice(0, 5).join('\n')
-        Alert.alert('Error', `Códigos no encontrados en BD:\n\n${lista}`)
+      if (detalles.length === 0) {
+        Alert.alert('Error', 'No hay detalles para enviar. Verifica que hayas escaneado los productos.')
         setIsProcessing(false)
         return
       }
+      
+      // GUARDAR BACKUP antes de enviar (por si falla)
+      const backupData = {
+        productos,
+        meta,
+        folio,
+        detalles,
+        timestamp: Date.now(),
+      }
+      await AsyncStorage.setItem('@xml_backup', JSON.stringify(backupData))
+      console.log('💾 Backup guardado en AsyncStorage')
       
       // Enviar recepción
       const payload = {
@@ -392,28 +427,33 @@ export default function ProcesarXMLScreen() {
         P_CONCEPTO_ID: 27,
         P_SUCURSAL_ID: 384,
         P_ALMACEN_ID: 19,
-        P_DESCRIPCION: `RECEPCION XML - ${folio}`,
+        P_DESCRIPCION: `RECEPCION XML`,
         P_NATURALEZA_CONCEPTO: 'E',
         detalles,
       }
       
+      console.log('📤 Enviando payload:', JSON.stringify(payload, null, 2))
+      
       const result = await API.enviarRecepcion(baseURL, payload)
       
       if (result.ok) {
+        // Limpiar backup si fue exitoso
+        await AsyncStorage.removeItem('@xml_backup')
+        
         setCompletionMessage(
           `Folio: ${result.folio || 'N/A'}\nDOCTO_IN_ID: ${result.doctoId}\nLíneas: ${result.inserted}\nTiempo: ${formatTime(elapsedSeconds)}`
         )
         setShowCompletionModal(true)
       } else {
-        Alert.alert('Error', result.message || 'Error al guardar recepción')
+        Alert.alert('Error', result.message || 'Error al guardar recepción\n\n💾 Tu progreso está guardado, intenta de nuevo.')
       }
     } catch (error) {
       console.error('Error guardando:', error)
-      Alert.alert('Error', 'Error de conexión')
+      Alert.alert('Error', 'Error de conexión\n\n💾 Tu progreso está guardado, intenta de nuevo.')
     } finally {
       setIsProcessing(false)
     }
-  }, [stats.listo, baseURL, isCachorro, productos, cachorroTallas, requireScan, proveedor, folio, elapsedSeconds])
+  }, [stats.listo, baseURL, isCachorro, productos, meta, requireScan, proveedor, folio, elapsedSeconds])
 
   // Back handler
   useEffect(() => {
@@ -467,6 +507,22 @@ export default function ProcesarXMLScreen() {
         <Text style={[styles.itemDesc, { color: colors.textSecondary }]} numberOfLines={2}>
           {item.DESCRIPCION}
         </Text>
+        
+        {/* Badges de claves Microsip asignadas con conteo */}
+        {item._clavesMicrosipAsignadas && Object.keys(item._clavesMicrosipAsignadas).length > 0 && (
+          <View style={styles.badgesContainer}>
+            {Object.entries(item._clavesMicrosipAsignadas).map(([clave, count]) => (
+              <View key={clave} style={[styles.microsipBadge, { backgroundColor: '#E0F2FE' }]}>
+                <Ionicons name="link" size={12} color="#0284C7" />
+                <Text style={styles.microsipBadgeText}>{clave}</Text>
+                <View style={styles.microsipBadgeCount}>
+                  <Text style={styles.microsipBadgeCountText}>{count}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+        
         <View style={styles.itemFooter}>
           <View style={styles.qtyContainer}>
             <TouchableOpacity 
@@ -485,7 +541,7 @@ export default function ProcesarXMLScreen() {
               <Ionicons name="add" size={18} color={colors.text} />
             </TouchableOpacity>
           </View>
-          <Text style={[styles.itemPrice, { color: RECEPCION_COLOR }]}>
+          <Text style={[styles.itemPrice, { color: colors.accent }]}>
             {currency.format(item.VALOR_UNITARIO * req)}
           </Text>
         </View>
@@ -496,7 +552,7 @@ export default function ProcesarXMLScreen() {
   if (isLoading) {
     return (
       <View style={[styles.container, styles.center, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={RECEPCION_COLOR} />
+        <ActivityIndicator size="large" color={colors.accent} />
         <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Cargando...</Text>
       </View>
     )
@@ -516,7 +572,7 @@ export default function ProcesarXMLScreen() {
           </Text>
         </View>
         <View style={styles.headerRight}>
-          <Text style={[styles.timerText, { color: RECEPCION_COLOR }]}>
+          <Text style={[styles.timerText, { color: colors.accent }]}>
             {formatTime(elapsedSeconds)}
           </Text>
         </View>
@@ -528,20 +584,20 @@ export default function ProcesarXMLScreen() {
           <Text style={[styles.progressText, { color: colors.text }]}>
             {stats.lineasCompletas}/{stats.totalLineas} líneas • {stats.totalHechas}/{stats.totalRequeridas} pzas
           </Text>
-          <Text style={[styles.progressPercent, { color: RECEPCION_COLOR }]}>
+          <Text style={[styles.progressPercent, { color: colors.accent }]}>
             {Math.round(stats.progreso * 100)}%
           </Text>
         </View>
         <View style={[styles.progressBar, { backgroundColor: colors.background }]}>
           <View 
-            style={[styles.progressFill, { width: `${stats.progreso * 100}%`, backgroundColor: RECEPCION_COLOR }]} 
+            style={[styles.progressFill, { width: `${stats.progreso * 100}%`, backgroundColor: colors.accent }]} 
           />
         </View>
       </View>
 
       {/* Scanner input */}
       <View style={[styles.scannerContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <Ionicons name="scan-outline" size={20} color={RECEPCION_COLOR} />
+        <Ionicons name="scan-outline" size={20} color={colors.accent} />
         <TextInput
           ref={scannerRef}
           style={[styles.scannerInput, { color: colors.text }]}
@@ -557,7 +613,7 @@ export default function ProcesarXMLScreen() {
           returnKeyType="search"
         />
         {isLoadingAlternos && (
-          <ActivityIndicator size="small" color={RECEPCION_COLOR} />
+          <ActivityIndicator size="small" color={colors.accent} />
         )}
       </View>
 
@@ -577,7 +633,7 @@ export default function ProcesarXMLScreen() {
         <TouchableOpacity
           style={[
             styles.saveButton,
-            { backgroundColor: stats.listo ? RECEPCION_COLOR : colors.border },
+            { backgroundColor: stats.listo ? colors.accent : colors.border },
           ]}
           onPress={handleGuardar}
           disabled={!stats.listo || isProcessing}
@@ -607,7 +663,7 @@ export default function ProcesarXMLScreen() {
               {completionMessage}
             </Text>
             <TouchableOpacity
-              style={[styles.modalButton, { backgroundColor: RECEPCION_COLOR }]}
+              style={[styles.modalButton, { backgroundColor: colors.accent }]}
               onPress={() => {
                 setShowCompletionModal(false)
                 router.replace('/(main)/inventarios/recepcion' as any)
@@ -666,7 +722,41 @@ const styles = StyleSheet.create({
   },
   itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   itemCode: { fontSize: 15, fontWeight: '600' },
-  itemDesc: { fontSize: 13, marginTop: 4, marginBottom: 8 },
+  itemDesc: { fontSize: 13, marginTop: 4, marginBottom: 4 },
+  badgesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 8,
+  },
+  microsipBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 8,
+    paddingRight: 4,
+    paddingVertical: 4,
+    borderRadius: 6,
+    gap: 4,
+  },
+  microsipBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#0284C7',
+  },
+  microsipBadgeCount: {
+    backgroundColor: '#0284C7',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+  },
+  microsipBadgeCountText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#fff',
+  },
   itemFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   qtyContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   qtyBtn: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },

@@ -1,32 +1,41 @@
-import { useAuth } from '@/context/auth-context';
-import { useTheme } from '@/context/theme-context';
-import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useRef, useState } from 'react';
+import { API_CONFIG } from "@/config/api";
+import { useAuth } from "@/context/auth-context";
+import { useLanguage } from "@/context/language-context";
+import { useTheme, useThemeColors } from "@/context/theme-context";
+import { Database, getDatabases, setCurrentDatabaseId } from "@/services/api";
+import { Ionicons } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
+import { LinearGradient } from "expo-linear-gradient";
+import React, { useEffect, useRef, useState } from "react";
 import {
-    Animated,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-} from 'react-native';
-
-// Bases de datos disponibles
-const databases = [
-  { id: 1, name: 'KRKN_PROD_DB', server: 'db.krkn.mx', type: 'Producción' },
-  { id: 2, name: 'KRKN_DEV_DB', server: 'dev.krkn.mx', type: 'Desarrollo' },
-  { id: 3, name: 'KRKN_TEST_DB', server: 'test.krkn.mx', type: 'Pruebas' },
-];
+  ActivityIndicator,
+  Animated,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 export default function HomeScreen() {
   const { isDark } = useTheme();
-  const { companyCode } = useAuth();
-  const [selectedDb, setSelectedDb] = useState(databases[0]);
+  const colors = useThemeColors();
+  const { companyCode, selectedDatabase, selectDatabase, user } = useAuth();
+  const { t, language } = useLanguage();
+  const [databases, setDatabases] = useState<Database[]>([]);
+  const [selectedDb, setSelectedDb] = useState<Database | null>(
+    selectedDatabase,
+  );
   const [showDbModal, setShowDbModal] = useState(false);
+  const [loadingDatabases, setLoadingDatabases] = useState(true);
+  const [stats, setStats] = useState({
+    articulos: 0,
+    categorias: 0,
+    almacenes: 0,
+  });
+  const [loadingStats, setLoadingStats] = useState(false);
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -47,204 +56,455 @@ export default function HomeScreen() {
     ]).start();
   }, []);
 
-  const theme = {
-    bg: isDark ? '#08050D' : '#FAFAFA',
-    surface: isDark ? '#0D0912' : '#FFFFFF',
-    border: isDark ? '#1C1326' : '#E8E8E8',
-    text: isDark ? '#FFFFFF' : '#1A1A1A',
-    textSecondary: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)',
-    textMuted: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
-    accent: '#9D4EDD',
-    accentDark: '#7B2CBF',
-    accentBg: isDark ? 'rgba(157,78,221,0.12)' : 'rgba(157,78,221,0.08)',
-    success: '#34C759',
+  // Cargar bases de datos de la empresa
+  useEffect(() => {
+    if (companyCode) {
+      loadDatabases();
+    }
+  }, [companyCode]);
+
+  useEffect(() => {
+    if (selectedDb) {
+      loadStats();
+    }
+  }, [selectedDb]);
+
+  const loadStats = async () => {
+    if (!selectedDb) return;
+    setLoadingStats(true);
+    try {
+      const url = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.DASHBOARD_STATS}?databaseId=${selectedDb.id}`;
+      const response = await fetch(url);
+      const data = await response.json();
+      if (data.ok) {
+        setStats({
+          articulos: data.articulos || 0,
+          categorias: data.categorias || 0,
+          almacenes: data.almacenes || 0,
+        });
+      }
+    } catch (e) {
+      console.error("Error loading stats:", e);
+    } finally {
+      setLoadingStats(false);
+    }
   };
 
-  const today = new Date().toLocaleDateString('es-MX', { 
-    weekday: 'long', 
-    day: 'numeric', 
-    month: 'long' 
-  });
+  const loadDatabases = async () => {
+    if (!companyCode) return;
+
+    setLoadingDatabases(true);
+    try {
+      const response = await getDatabases(companyCode);
+      // console.log("getDatabases response:", response);
+
+      if (response.ok && response.databases) {
+        // console.log("Databases loaded:", response.databases);
+        setDatabases(response.databases);
+
+        // Si ya hay una BD seleccionada en el contexto, usarla
+        if (selectedDatabase) {
+          setSelectedDb(selectedDatabase);
+          setCurrentDatabaseId(selectedDatabase.id);
+        } else {
+          // Seleccionar la primera base de datos por defecto
+          const dbToSelect = response.databases[0];
+          console.log("Selected DB:", dbToSelect);
+          setSelectedDb(dbToSelect);
+          selectDatabase(dbToSelect); // Guardar en contexto
+          setCurrentDatabaseId(dbToSelect.id); // Establecer para las peticiones
+        }
+      } else {
+        console.log("No databases found or error:", response.message);
+      }
+    } catch (error) {
+      console.error("Error loading databases:", error);
+    } finally {
+      setLoadingDatabases(false);
+    }
+  };
+
+  const formatNumber = (num: number) => {
+    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  };
+
+  const today = new Date().toLocaleDateString(
+    language === "en" ? "en-US" : "es-MX",
+    {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    },
+  );
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      <ScrollView 
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-      <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={[styles.initialBadge, { borderColor: theme.border }]}>
-            <Text style={[styles.initialText, { color: theme.accent }]}>
-              {companyCode?.charAt(0).toUpperCase() || 'K'}
-            </Text>
-          </View>
-          <View style={styles.headerInfo}>
-            <Text style={[styles.company, { color: theme.text }]}>
-              {companyCode?.toUpperCase() || 'EMPRESA'}
-            </Text>
-            <Text style={[styles.date, { color: theme.textMuted }]}>{today}</Text>
-          </View>
-        </View>
-
-        {/* Quick Stats */}
-        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <LinearGradient
-            colors={['transparent', `${theme.accent}50`, 'transparent']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.cardGlow}
-          />
-          <View style={styles.statsGrid}>
-            <StatItem value="12,458" label="Productos" theme={theme} />
-            <View style={[styles.statDivider, { backgroundColor: theme.border }]} />
-            <StatItem value="847" label="Categorías" theme={theme} />
-            <View style={[styles.statDivider, { backgroundColor: theme.border }]} />
-            <StatItem value="32" label="Almacenes" theme={theme} />
-          </View>
-        </View>
-
-        {/* Session Info - Expanded */}
-        <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>SESIÓN ACTIVA</Text>
-        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <InfoRow 
-            icon="person-outline" 
-            label="Usuario" 
-            value={`admin@${companyCode}.krkn.mx`} 
-            theme={theme} 
-          />
-          <View style={[styles.rowDivider, { backgroundColor: theme.border }]} />
-          <InfoRow 
-            icon="business-outline" 
-            label="Empresa" 
-            value={companyCode?.toUpperCase() || 'EMPRESA'} 
-            theme={theme} 
-          />
-          <View style={[styles.rowDivider, { backgroundColor: theme.border }]} />
-          <InfoRow 
-            icon="globe-outline" 
-            label="Instancia" 
-            value={`${companyCode}.krkn.mx`} 
-            theme={theme} 
-          />
-          <View style={[styles.rowDivider, { backgroundColor: theme.border }]} />
-          <InfoRow 
-            icon="calendar-outline" 
-            label="Fecha" 
-            value={new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })} 
-            theme={theme} 
-          />
-          <View style={[styles.rowDivider, { backgroundColor: theme.border }]} />
-          <InfoRow 
-            icon="time-outline" 
-            label="Hora" 
-            value={new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })} 
-            theme={theme} 
-          />
-          <View style={[styles.rowDivider, { backgroundColor: theme.border }]} />
-          <InfoRow 
-            icon="shield-checkmark-outline" 
-            label="Rol" 
-            value="Administrador" 
-            theme={theme} 
-          />
-        </View>
-
-        {/* Database - At bottom */}
-        <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>CONFIGURACIÓN</Text>
-        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <View style={styles.dbRow}>
-            <View style={[styles.dbIcon, { backgroundColor: theme.accentBg }]}>
-              <Ionicons name="server-outline" size={18} color={theme.accent} />
-            </View>
-            <View style={styles.dbInfo}>
-              <Text style={[styles.dbName, { color: theme.text }]}>{selectedDb.name}</Text>
-              <Text style={[styles.dbServer, { color: theme.textMuted }]}>
-                {selectedDb.server} · {selectedDb.type}
+        <Animated.View
+          style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}
+        >
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={[styles.initialBadge, { borderColor: colors.border }]}>
+              <Text style={[styles.initialText, { color: colors.accent }]}>
+                {companyCode?.charAt(0).toUpperCase() || "K"}
               </Text>
             </View>
-            <View style={[styles.statusBadge, { backgroundColor: `${theme.success}15` }]}>
-              <View style={[styles.statusDot, { backgroundColor: theme.success }]} />
-              <Text style={[styles.statusText, { color: theme.success }]}>Online</Text>
+            <View style={styles.headerInfo}>
+              <Text style={[styles.company, { color: colors.text }]}>
+                {companyCode?.toUpperCase() || "EMPRESA"}
+              </Text>
+              <Text style={[styles.date, { color: colors.textTertiary }]}>
+                {today}
+              </Text>
             </View>
           </View>
-          <View style={[styles.rowDivider, { backgroundColor: theme.border }]} />
-          <TouchableOpacity 
-            style={styles.changeBtn}
-            onPress={() => setShowDbModal(true)}
-            activeOpacity={0.6}
+
+          {/* Quick Stats */}
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
           >
-            <Ionicons name="swap-horizontal-outline" size={16} color={theme.accent} />
-            <Text style={[styles.changeBtnText, { color: theme.accent }]}>Cambiar Base de Datos</Text>
-          </TouchableOpacity>
-        </View>
-      </Animated.View>
-    </ScrollView>
+            <LinearGradient
+              colors={["transparent", `${colors.accent}50`, "transparent"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.cardGlow}
+            />
+            <View style={styles.statsGrid}>
+              <StatItem
+                key="products"
+                value={formatNumber(stats.articulos)}
+                isLoading={loadingStats}
+                label={t("inventory.products")}
+                colors={colors}
+              />
+              <View
+                key="div1"
+                style={[styles.statDivider, { backgroundColor: colors.border }]}
+              />
+              <StatItem
+                key="categories"
+                value={formatNumber(stats.categorias)}
+                isLoading={loadingStats}
+                label={t("inventory.categories")}
+                colors={colors}
+              />
+              <View
+                key="div2"
+                style={[styles.statDivider, { backgroundColor: colors.border }]}
+              />
+              <StatItem
+                key="warehouses"
+                value={formatNumber(stats.almacenes)}
+                isLoading={loadingStats}
+                label={t("inventory.warehouses")}
+                colors={colors}
+              />
+            </View>
+          </View>
 
-    {/* Footer - Always at bottom */}
-    <View style={[styles.footerContainer, { borderTopColor: theme.border }]}>
-      <Text style={[styles.footer, { color: theme.textMuted }]}>KRKN WMS v1.0.0</Text>
-    </View>
+          {/* Session Info - Expanded */}
+          <Text style={[styles.sectionLabel, { color: colors.textTertiary }]}>
+            {t("home.activeSession")}
+          </Text>
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
+            <InfoRow
+              icon="person-outline"
+              label={t("home.user")}
+              value={
+                user
+                  ? `${user.NOMBRE} ${user.APELLIDO_PATERNO || ""} ${user.APELLIDO_MATERNO || ""}`.trim()
+                  : "Usuario"
+              }
+              colors={colors}
+            />
+            <View
+              style={[styles.rowDivider, { backgroundColor: colors.border }]}
+            />
+            <InfoRow
+              icon="at-outline"
+              label="Username"
+              value={user?.USERNAME || "N/A"}
+              colors={colors}
+            />
+            <View
+              style={[styles.rowDivider, { backgroundColor: colors.border }]}
+            />
+            <InfoRow
+              icon="mail-outline"
+              label="Email"
+              value={user?.EMAIL || "Sin correo"}
+              colors={colors}
+            />
+            <View
+              style={[styles.rowDivider, { backgroundColor: colors.border }]}
+            />
+            <InfoRow
+              icon="call-outline"
+              label="Teléfono"
+              value={user?.TELEFONO || "Sin teléfono"}
+              colors={colors}
+            />
+            <View
+              style={[styles.rowDivider, { backgroundColor: colors.border }]}
+            />
+            <InfoRow
+              icon="business-outline"
+              label={t("home.company")}
+              value={companyCode?.toUpperCase() || "EMPRESA"}
+              colors={colors}
+            />
+            <View
+              style={[styles.rowDivider, { backgroundColor: colors.border }]}
+            />
+            <InfoRow
+              icon="shield-checkmark-outline"
+              label={t("home.role")}
+              value={t("home.administrator")}
+              colors={colors}
+            />
+          </View>
 
-    {/* Modal */}
-      <Modal 
-        visible={showDbModal} 
-        transparent 
-        animationType="fade" 
+          {/* Database - At bottom */}
+          <Text style={[styles.sectionLabel, { color: colors.textTertiary }]}>
+            {t("home.configuration")}
+          </Text>
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
+            {loadingDatabases ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color={colors.accent} />
+                <Text
+                  style={[styles.loadingText, { color: colors.textTertiary }]}
+                >
+                  Cargando bases de datos...
+                </Text>
+              </View>
+            ) : selectedDb ? (
+              <>
+                <View style={styles.dbRow}>
+                  <View
+                    style={[
+                      styles.dbIcon,
+                      { backgroundColor: colors.accentLight },
+                    ]}
+                  >
+                    <Ionicons
+                      name="server-outline"
+                      size={18}
+                      color={colors.accent}
+                    />
+                  </View>
+                  <View style={styles.dbInfo}>
+                    <Text style={[styles.dbName, { color: colors.text }]}>
+                      {selectedDb.nombre}
+                    </Text>
+                    <Text
+                      style={[styles.dbServer, { color: colors.textTertiary }]}
+                    >
+                      {selectedDb.ip_servidor}:{selectedDb.puerto_bd}
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      { backgroundColor: `${colors.success}15` },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.statusDot,
+                        { backgroundColor: colors.success },
+                      ]}
+                    />
+                    <Text
+                      style={[styles.statusText, { color: colors.success }]}
+                    >
+                      Online
+                    </Text>
+                  </View>
+                </View>
+                <View
+                  style={[
+                    styles.rowDivider,
+                    { backgroundColor: colors.border },
+                  ]}
+                />
+                <TouchableOpacity
+                  style={styles.changeBtn}
+                  onPress={() => setShowDbModal(true)}
+                  activeOpacity={0.6}
+                  disabled={databases.length === 0}
+                >
+                  <Ionicons
+                    name="swap-horizontal-outline"
+                    size={16}
+                    color={colors.accent}
+                  />
+                  <Text
+                    style={[styles.changeBtnText, { color: colors.accent }]}
+                  >
+                    {t("home.changeDatabase")}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <View style={styles.loadingContainer}>
+                <Ionicons
+                  name="alert-circle-outline"
+                  size={24}
+                  color={colors.textTertiary}
+                />
+                <Text
+                  style={[styles.loadingText, { color: colors.textTertiary }]}
+                >
+                  No hay bases de datos disponibles
+                </Text>
+              </View>
+            )}
+          </View>
+        </Animated.View>
+      </ScrollView>
+
+      {/* Footer - Always at bottom */}
+      <View style={[styles.footerContainer, { borderTopColor: colors.border }]}>
+        <Text style={[styles.footer, { color: colors.textTertiary }]}>
+          KRKN WMS v1.0.0
+        </Text>
+      </View>
+
+      {/* Modal */}
+      <Modal
+        visible={showDbModal}
+        transparent
+        animationType="fade"
         onRequestClose={() => setShowDbModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <BlurView 
-            intensity={isDark ? 40 : 60} 
-            tint={isDark ? 'dark' : 'light'} 
+          <BlurView
+            intensity={isDark ? 40 : 60}
+            tint={isDark ? "dark" : "light"}
             style={styles.modalBlur}
           >
-            <View style={[styles.modalCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <View
+              style={[
+                styles.modalCard,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+            >
               <View style={styles.modalHeader}>
-                <Text style={[styles.modalTitle, { color: theme.text }]}>Base de Datos</Text>
-                <TouchableOpacity 
-                  style={[styles.modalClose, { backgroundColor: theme.accentBg }]}
+                <Text style={[styles.modalTitle, { color: colors.text }]}>
+                  {t("home.database")}
+                </Text>
+                <TouchableOpacity
+                  style={[
+                    styles.modalClose,
+                    { backgroundColor: colors.accentLight },
+                  ]}
                   onPress={() => setShowDbModal(false)}
                 >
-                  <Ionicons name="close" size={18} color={theme.textSecondary} />
+                  <Ionicons
+                    name="close"
+                    size={18}
+                    color={colors.textSecondary}
+                  />
                 </TouchableOpacity>
               </View>
-              
-              {databases.map((db, index) => (
-                <TouchableOpacity
-                  key={db.id}
-                  style={[
-                    styles.dbOption, 
-                    { borderColor: selectedDb.id === db.id ? theme.accent : theme.border }
-                  ]}
-                  onPress={() => { setSelectedDb(db); setShowDbModal(false); }}
-                  activeOpacity={0.7}
-                >
-                  <View style={[styles.dbOptionIcon, { backgroundColor: theme.accentBg }]}>
-                    <Ionicons 
-                      name="server-outline" 
-                      size={16} 
-                      color={selectedDb.id === db.id ? theme.accent : theme.textMuted} 
-                    />
-                  </View>
-                  <View style={styles.dbOptionInfo}>
-                    <Text style={[
-                      styles.dbOptionName, 
-                      { color: selectedDb.id === db.id ? theme.accent : theme.text }
-                    ]}>
-                      {db.name}
-                    </Text>
-                    <Text style={[styles.dbOptionServer, { color: theme.textMuted }]}>
-                      {db.server} · {db.type}
-                    </Text>
-                  </View>
-                  {selectedDb.id === db.id && (
-                    <Ionicons name="checkmark-circle" size={18} color={theme.accent} />
-                  )}
-                </TouchableOpacity>
-              ))}
+
+              {databases.length === 0 ? (
+                <View style={styles.loadingContainer}>
+                  <Text
+                    style={[styles.loadingText, { color: colors.textTertiary }]}
+                  >
+                    No hay bases de datos disponibles
+                  </Text>
+                </View>
+              ) : (
+                databases.map((db) => (
+                  <TouchableOpacity
+                    key={db.id}
+                    style={[
+                      styles.dbOption,
+                      {
+                        borderColor:
+                          selectedDb?.id === db.id
+                            ? colors.accent
+                            : colors.border,
+                      },
+                    ]}
+                    onPress={() => {
+                      setSelectedDb(db);
+                      selectDatabase(db); // Guardar en contexto
+                      setCurrentDatabaseId(db.id); // Establecer para las peticiones
+                      setShowDbModal(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View
+                      style={[
+                        styles.dbOptionIcon,
+                        { backgroundColor: colors.accentLight },
+                      ]}
+                    >
+                      <Ionicons
+                        name="server-outline"
+                        size={16}
+                        color={
+                          selectedDb?.id === db.id
+                            ? colors.accent
+                            : colors.textTertiary
+                        }
+                      />
+                    </View>
+                    <View style={styles.dbOptionInfo}>
+                      <Text
+                        style={[
+                          styles.dbOptionName,
+                          {
+                            color:
+                              selectedDb?.id === db.id
+                                ? colors.accent
+                                : colors.text,
+                          },
+                        ]}
+                      >
+                        {db.nombre}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.dbOptionServer,
+                          { color: colors.textTertiary },
+                        ]}
+                      >
+                        {db.ip_servidor}:{db.puerto_bd}
+                      </Text>
+                    </View>
+                    {selectedDb?.id === db.id && (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={18}
+                        color={colors.accent}
+                      />
+                    )}
+                  </TouchableOpacity>
+                ))
+              )}
             </View>
           </BlurView>
         </View>
@@ -253,46 +513,115 @@ export default function HomeScreen() {
   );
 }
 
-function StatItem({ value, label, theme }: { value: string; label: string; theme: any }) {
+function AnimatedPulse({ colors }: { colors: any }) {
+  const pulseAnim = useRef(new Animated.Value(0.6)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 0.6,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ]),
+    ).start();
+  }, []);
+
+  return (
+    <Animated.View
+      style={{
+        opacity: pulseAnim,
+        transform: [{ scale: pulseAnim }],
+        flexDirection: "row",
+        gap: 3,
+        alignItems: "center",
+        height: 24,
+      }}
+    >
+      {[0, 1, 2].map((i) => (
+        <View
+          key={i}
+          style={{
+            width: 5,
+            height: 5,
+            borderRadius: 2.5,
+            backgroundColor: colors.textTertiary,
+          }}
+        />
+      ))}
+    </Animated.View>
+  );
+}
+
+function StatItem({
+  value,
+  label,
+  colors,
+  isLoading,
+}: {
+  value: string;
+  label: string;
+  colors: any;
+  isLoading?: boolean;
+}) {
   return (
     <View style={styles.statItem}>
-      <Text style={[styles.statValue, { color: theme.text }]}>{value}</Text>
-      <Text style={[styles.statLabel, { color: theme.textMuted }]}>{label}</Text>
+      {isLoading ? (
+        <AnimatedPulse colors={colors} />
+      ) : (
+        <Text style={[styles.statValue, { color: colors.text }]}>{value}</Text>
+      )}
+      <Text style={[styles.statLabel, { color: colors.textTertiary }]}>
+        {label}
+      </Text>
     </View>
   );
 }
 
-function InfoRow({ icon, label, value, theme }: { 
-  icon: keyof typeof Ionicons.glyphMap; 
-  label: string; 
-  value: string; 
-  theme: any;
+function InfoRow({
+  icon,
+  label,
+  value,
+  colors,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+  colors: any;
 }) {
   return (
     <View style={styles.infoRow}>
-      <Ionicons name={icon} size={16} color={theme.textMuted} />
-      <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>{label}</Text>
-      <Text style={[styles.infoValue, { color: theme.text }]}>{value}</Text>
+      <Ionicons name={icon} size={16} color={colors.textTertiary} />
+      <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>
+        {label}
+      </Text>
+      <Text style={[styles.infoValue, { color: colors.text }]}>{value}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { 
+  container: {
     flex: 1,
   },
   scrollView: {
     flex: 1,
   },
-  content: { 
+  content: {
     padding: 20,
     paddingTop: 16,
     paddingBottom: 20,
   },
   // Header
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 20,
   },
   initialBadge: {
@@ -300,30 +629,30 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 14,
     borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   initialText: {
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   headerInfo: {
     marginLeft: 14,
   },
   company: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: "700",
     letterSpacing: 2,
   },
   date: {
     fontSize: 12,
     marginTop: 2,
-    textTransform: 'capitalize',
+    textTransform: "capitalize",
   },
   // Section
   sectionLabel: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: "600",
     letterSpacing: 1,
     marginTop: 20,
     marginBottom: 10,
@@ -333,10 +662,10 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 14,
     borderWidth: 1,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   cardGlow: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 20,
     right: 20,
@@ -344,16 +673,16 @@ const styles = StyleSheet.create({
   },
   // Stats
   statsGrid: {
-    flexDirection: 'row',
+    flexDirection: "row",
     paddingVertical: 18,
   },
   statItem: {
     flex: 1,
-    alignItems: 'center',
+    alignItems: "center",
   },
   statValue: {
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   statLabel: {
     fontSize: 11,
@@ -362,7 +691,7 @@ const styles = StyleSheet.create({
   statDivider: {
     width: 1,
     height: 32,
-    alignSelf: 'center',
+    alignSelf: "center",
   },
   // Info Row
   rowDivider: {
@@ -370,8 +699,8 @@ const styles = StyleSheet.create({
     marginLeft: 40,
   },
   infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingVertical: 14,
     paddingHorizontal: 16,
     gap: 12,
@@ -382,20 +711,20 @@ const styles = StyleSheet.create({
   },
   infoValue: {
     fontSize: 13,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   // Database
   dbRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     padding: 14,
   },
   dbIcon: {
     width: 36,
     height: 36,
     borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   dbInfo: {
     flex: 1,
@@ -403,15 +732,15 @@ const styles = StyleSheet.create({
   },
   dbName: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   dbServer: {
     fontSize: 11,
     marginTop: 2,
   },
   statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 10,
@@ -424,24 +753,35 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 10,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   changeBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 12,
     gap: 6,
   },
   changeBtnText: {
     fontSize: 13,
-    fontWeight: '500',
+    fontWeight: "500",
+  },
+  loadingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 20,
+    gap: 10,
+  },
+  loadingText: {
+    fontSize: 13,
+    fontWeight: "500",
   },
   // Footer
   footerContainer: {
     paddingVertical: 12,
-    paddingBottom: Platform.OS === 'ios' ? 28 : 16,
-    alignItems: 'center',
+    paddingBottom: Platform.OS === "ios" ? 28 : 16,
+    alignItems: "center",
     borderTopWidth: 1,
   },
   footer: {
@@ -450,15 +790,15 @@ const styles = StyleSheet.create({
   // Modal
   modalOverlay: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.5)",
   },
   modalBlur: {
     borderRadius: 18,
-    overflow: 'hidden',
+    overflow: "hidden",
     marginHorizontal: 24,
-    width: '100%',
+    width: "100%",
     maxWidth: 340,
   },
   modalCard: {
@@ -467,25 +807,25 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 16,
   },
   modalTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   modalClose: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   dbOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     padding: 12,
     borderRadius: 12,
     borderWidth: 1,
@@ -495,8 +835,8 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   dbOptionInfo: {
     flex: 1,
@@ -504,7 +844,7 @@ const styles = StyleSheet.create({
   },
   dbOptionName: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   dbOptionServer: {
     fontSize: 10,

@@ -1,10 +1,8 @@
 import { useThemeColors } from '@/context/theme-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import React, { useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import React, { useEffect, useState } from 'react';
 import { Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-
-const RECEPCION_COLOR = '#1565C0';
 
 type RecepcionTipo = 'manual' | 'xml' | 'excel';
 type ProveedorXML = 'panam' | 'cachorro' | 'mundo';
@@ -51,8 +49,18 @@ const PROVEEDORES_XML: OpcionProveedor[] = [
 
 export default function RecepcionesListScreen() {
   const colors = useThemeColors();
-  const [showTipoModal, setShowTipoModal] = useState(true); // Abre automáticamente
+  const params = useLocalSearchParams<{ tipo?: string }>();
+  const [showTipoModal, setShowTipoModal] = useState(false);
   const [showProveedorModal, setShowProveedorModal] = useState(false);
+
+  // Si viene con tipo=xml, mostrar directo el modal de proveedores
+  useEffect(() => {
+    if (params.tipo === 'xml') {
+      setShowProveedorModal(true);
+    } else {
+      setShowTipoModal(true);
+    }
+  }, [params.tipo]);
 
   const handleSeleccionTipo = (tipo: RecepcionTipo) => {
     setShowTipoModal(false);
@@ -60,8 +68,10 @@ export default function RecepcionesListScreen() {
     if (tipo === 'manual') {
       router.push('/(main)/inventarios/recepcion/crear');
     } else if (tipo === 'xml') {
-      // Mostrar modal de proveedores
-      setShowProveedorModal(true);
+      // Mostrar modal de proveedores con delay para evitar conflictos
+      setTimeout(() => {
+        setShowProveedorModal(true);
+      }, 300);
     } else {
       // TODO: Implementar importación Excel
       Alert.alert('Próximamente', 'Importación Excel en desarrollo');
@@ -71,10 +81,7 @@ export default function RecepcionesListScreen() {
   const handleSeleccionProveedor = (proveedor: ProveedorXML) => {
     setShowProveedorModal(false);
     // Navegar al selector de XML con el proveedor seleccionado
-    router.push({
-      pathname: '/(main)/inventarios/recepcion/xml/selector' as any,
-      params: { proveedor },
-    });
+    router.push(`/(main)/inventarios/recepcion/xml/selector?proveedor=${proveedor}`);
   };
 
   return (
@@ -82,15 +89,15 @@ export default function RecepcionesListScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         {/* Empty State */}
         <View style={[styles.emptyCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={[styles.emptyIcon, { backgroundColor: `${RECEPCION_COLOR}15` }]}>
-            <Ionicons name="cube-outline" size={40} color={RECEPCION_COLOR} />
+          <View style={[styles.emptyIcon, { backgroundColor: `${colors.accent}15` }]}>
+            <Ionicons name="cube-outline" size={40} color={colors.accent} />
           </View>
           <Text style={[styles.emptyTitle, { color: colors.text }]}>Sin recepciones</Text>
           <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
             No hay recepciones registradas. Crea tu primera recepción para comenzar.
           </Text>
           <TouchableOpacity 
-            style={[styles.createButton, { backgroundColor: RECEPCION_COLOR }]}
+            style={[styles.createButton, { backgroundColor: colors.accent }]}
             onPress={() => setShowTipoModal(true)}
           >
             <Ionicons name="add" size={20} color="#fff" />
@@ -123,8 +130,8 @@ export default function RecepcionesListScreen() {
                   onPress={() => handleSeleccionTipo(opcion.id)}
                   activeOpacity={0.7}
                 >
-                  <View style={[styles.opcionIconWrapper, { backgroundColor: `${RECEPCION_COLOR}15` }]}>
-                    <Ionicons name={opcion.icono} size={28} color={RECEPCION_COLOR} />
+                  <View style={[styles.opcionIconWrapper, { backgroundColor: `${colors.accent}15` }]}>
+                    <Ionicons name={opcion.icono} size={28} color={colors.accent} />
                   </View>
                   <View style={styles.opcionInfo}>
                     <Text style={[styles.opcionTitulo, { color: colors.text }]}>{opcion.titulo}</Text>
@@ -176,8 +183,8 @@ export default function RecepcionesListScreen() {
                   onPress={() => handleSeleccionProveedor(proveedor.id)}
                   activeOpacity={0.7}
                 >
-                  <View style={[styles.proveedorIconWrapper, { backgroundColor: `${RECEPCION_COLOR}15` }]}>
-                    <Ionicons name={proveedor.icono} size={24} color={RECEPCION_COLOR} />
+                  <View style={[styles.proveedorIconWrapper, { backgroundColor: `${colors.accent}15` }]}>
+                    <Ionicons name={proveedor.icono} size={24} color={colors.accent} />
                   </View>
                   <Text style={[styles.proveedorNombre, { color: colors.text }]}>{proveedor.nombre}</Text>
                   <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />

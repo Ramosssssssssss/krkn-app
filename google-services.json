@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "745497129401",
+    "project_id": "krkn-78500",
+    "storage_bucket": "krkn-78500.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:745497129401:android:5355972fd81706f6c80668",
+        "android_client_info": {
+          "package_name": "com.black_sheep.KRKN_G"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD2uG8f7M2wE6H4nWcDqPTCs1dYGV5zx9s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

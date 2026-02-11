@@ -9,11 +9,12 @@
  */
 
 import type {
-    CachorroTallasMap,
-    ConceptoXML,
-    DatosComprobante,
-    ProductoXML,
-    XMLMeta,
+  CachorroTallasMap,
+  CodigosAlternosResult,
+  ConceptoXML,
+  DatosComprobante,
+  ProductoXML,
+  XMLMeta,
 } from '../types/xml'
 import { extraerModelo, normalizarCodigo } from '../utils/xml-parser'
 
@@ -144,52 +145,55 @@ export function procesarEscaneoCachorro(
 } {
   const codigo = normalizarCodigo(codigoEscaneado)
   
-  // 1. Buscar en mapa de códigos alternos
-  const claveMicrosip = codigosAlternosMap.get(codigo) || null
+  // 1. Buscar por código largo en mapa de alternos
+  const claveMicrosipPorLargo = codigosAlternosMap.get(codigo) || null
   
-  if (claveMicrosip) {
-    // Encontrado en mapa - verificar si tiene XML asociado
+  if (claveMicrosipPorLargo) {
+    // Encontrado por código largo - buscar XML asociado
     const codigoXml = codigoLargoToXml.get(codigo)
     
     if (codigoXml) {
-      // Tiene relación directa con XML
       return {
         encontrado: true,
         codigoBusqueda: extraerModelo(codigoXml, LONGITUD_MODELO),
-        claveMicrosip,
+        claveMicrosip: claveMicrosipPorLargo,
         requiereAsignacion: false,
         codigoXmlAsociado: codigoXml,
       }
     }
     
     // Buscar si el SKU ya fue asignado a algún XML
-    const xmlAsignado = claveMicrosipToXml.get(claveMicrosip)
+    const xmlAsignado = claveMicrosipToXml.get(claveMicrosipPorLargo)
     
     if (xmlAsignado) {
       return {
         encontrado: true,
         codigoBusqueda: extraerModelo(xmlAsignado, LONGITUD_MODELO),
-        claveMicrosip,
+        claveMicrosip: claveMicrosipPorLargo,
         requiereAsignacion: false,
         codigoXmlAsociado: xmlAsignado,
       }
     }
-    
-    // SKU existe pero no tiene XML asignado - requiere asignación manual
+  }
+  
+  // 2. Buscar directamente por clave Microsip (si escanearon el SKU)
+  const xmlPorMicrosip = claveMicrosipToXml.get(codigo)
+  
+  if (xmlPorMicrosip) {
     return {
-      encontrado: false,
-      codigoBusqueda: '',
-      claveMicrosip,
-      requiereAsignacion: true,
-      codigoXmlAsociado: null,
+      encontrado: true,
+      codigoBusqueda: extraerModelo(xmlPorMicrosip, LONGITUD_MODELO),
+      claveMicrosip: codigo, // El código escaneado ES la clave microsip
+      requiereAsignacion: false,
+      codigoXmlAsociado: xmlPorMicrosip,
     }
   }
   
-  // 2. No encontrado en mapa - requiere asignación manual
+  // 3. No encontrado - requiere asignación manual
   return {
     encontrado: false,
     codigoBusqueda: '',
-    claveMicrosip: null,
+    claveMicrosip: claveMicrosipPorLargo,
     requiereAsignacion: true,
     codigoXmlAsociado: null,
   }
@@ -282,4 +286,68 @@ export function convertirADetallesCachorro(
   }
 
   return detalles
+}
+
+/**
+ * Valida productos de Cachorro contra la tabla CODIGO_ALTERNO
+ * Marca cuáles tienen códigos alternos y cuáles no
+ * 
+ * @param productos - Productos procesados del XML
+ * @param codigosResult - Resultado de cargarCodigosAlternosBatch
+ * @returns Productos actualizados con _foundInDB y lista de no encontrados
+ */
+export function validarProductosCachorro(
+  productos: ProductoXML[],
+  codigosResult: CodigosAlternosResult
+): {
+  productos: ProductoXML[]
+  codigosNoEncontrados: string[]
+  codigosAlternosMap: Map<string, string>
+  largoToXmlMap: Map<string, string>
+  skuToXmlMap: Map<string, string>
+} {
+  const codigosNoEncontrados: string[] = []
+  
+  // Crear set de códigos XML que tienen alternos
+  // largoToXmlMap es: codigoLargo → codigoXML
+  // Necesitamos los valores (codigoXML) que SÍ tienen alternos
+  const codigosXmlConAlternos = new Set<string>()
+  for (const codigoXml of codigosResult.largoToXmlMap.values()) {
+    codigosXmlConAlternos.add(codigoXml)
+  }
+  
+  // Actualizar productos
+  const productosActualizados = productos.map(p => {
+    // _codigosLargos contiene los códigos XML (ej: 10027390T180A)
+    // Verificar si alguno de sus códigos del XML tiene alternos registrados
+    const tieneAlternos = p._codigosLargos?.some(codigoXml => 
+      codigosXmlConAlternos.has(codigoXml)
+    ) || codigosXmlConAlternos.has(p.CLAVE_ORIGINAL)
+    
+    if (!tieneAlternos) {
+      // Agregar los códigos que no tienen alternos
+      if (p._codigosLargos && p._codigosLargos.length > 0) {
+        for (const cl of p._codigosLargos) {
+          if (!codigosNoEncontrados.includes(cl)) {
+            codigosNoEncontrados.push(cl)
+          }
+        }
+      } else {
+        codigosNoEncontrados.push(p.CLAVE_ORIGINAL)
+      }
+    }
+    
+    return {
+      ...p,
+      _foundInDB: tieneAlternos,
+    }
+  })
+  
+  return {
+    productos: productosActualizados,
+    codigosNoEncontrados,
+    codigosAlternosMap: codigosResult.codigosMap,
+    largoToXmlMap: codigosResult.largoToXmlMap,
+    skuToXmlMap: codigosResult.skuToXmlMap,
+  }
 }

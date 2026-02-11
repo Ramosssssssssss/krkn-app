@@ -4,9 +4,12 @@
 export interface ArticuloDetalle {
   clave: string;
   descripcion: string;
+  nombre?: string;
   umed: string | null;
   cantidad: number;
   _key: string;
+  articuloId?: number;
+  localizacion?: string;
 }
 
 export type MovementType = 'entrada' | 'salida' | 'recepcion';

@@ -1,29 +1,29 @@
+import ArticleCard from '@/components/inventarios/ArticleCard';
+import ProductSearchBar from '@/components/inventarios/ProductSearchBar';
+import ScanHeader from '@/components/inventarios/ScanHeader';
 import { useThemeColors } from '@/context/theme-context';
 import { useSucursalesAlmacenes } from '@/hooks/use-sucursales-almacenes';
 import { Ionicons } from '@expo/vector-icons';
 import { router, Stack } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    Dimensions,
-    FlatList,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    Vibration,
-    View,
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Dimensions,
+  FlatList,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Vibration,
+  View,
 } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
-
-// Color principal para Recepción (azul)
-const RECEPCION_COLOR = '#1565C0';
 
 interface ArticuloDetalle {
   clave: string;
@@ -317,8 +317,17 @@ export default function CrearRecepcionScreen() {
   const handleUpdateQuantity = (key: string, delta: number) => {
     setDetalles(prev => prev.map(d => {
       if (d._key === key) {
-        const newQty = Math.max(1, d.cantidad + delta);
-        return { ...d, cantidad: newQty };
+        const newQty = d.cantidad + delta;
+        return newQty > 0 ? { ...d, cantidad: newQty } : d;
+      }
+      return d;
+    }));
+  };
+
+  const handleSetQuantity = (key: string, qty: number) => {
+    setDetalles(prev => prev.map(d => {
+      if (d._key === key) {
+        return { ...d, cantidad: Math.max(1, qty) };
       }
       return d;
     }));
@@ -369,128 +378,51 @@ export default function CrearRecepcionScreen() {
     );
   }
 
-  const renderArticuloItem = ({ item, index }: { item: ArticuloDetalle; index: number }) => {
-    const isFlashing = lastAddedIndex === index;
-    
-    return (
-      <Animated.View 
-        style={[
-          styles.articleItem,
-          { 
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
-            opacity: isFlashing ? flashAnim.interpolate({
-              inputRange: [0, 1],
-              outputRange: [1, 0.5]
-            }) : 1,
-          }
-        ]}
-      >
-        <View style={styles.articleInfo}>
-          <Text style={[styles.articleClave, { color: RECEPCION_COLOR }]}>{item.clave}</Text>
-          <Text style={[styles.articleDesc, { color: colors.text }]} numberOfLines={2}>
-            {item.descripcion}
-          </Text>
-          {item.umed && (
-            <Text style={[styles.articleUmed, { color: colors.textSecondary }]}>{item.umed}</Text>
-          )}
-        </View>
-        
-        <View style={styles.articleActions}>
-          <View style={styles.quantityControl}>
-            <TouchableOpacity 
-              style={[styles.qtyBtn, { backgroundColor: colors.border }]}
-              onPress={() => handleUpdateQuantity(item._key, -1)}
-            >
-              <Ionicons name="remove" size={18} color={colors.text} />
-            </TouchableOpacity>
-            <Text style={[styles.qtyText, { color: colors.text }]}>{item.cantidad}</Text>
-            <TouchableOpacity 
-              style={[styles.qtyBtn, { backgroundColor: RECEPCION_COLOR }]}
-              onPress={() => handleUpdateQuantity(item._key, 1)}
-            >
-              <Ionicons name="add" size={18} color="#fff" />
-            </TouchableOpacity>
-          </View>
-          
-          <TouchableOpacity style={styles.removeBtn} onPress={() => handleRemoveArticle(item._key)}>
-            <Ionicons name="trash-outline" size={18} color="#B71C1C" />
-          </TouchableOpacity>
-        </View>
-      </Animated.View>
-    );
-  };
+  const renderArticuloItem = ({ item, index }: { item: ArticuloDetalle; index: number }) => (
+    <ArticleCard
+      item={item}
+      index={index}
+      color={colors.accent}
+      isFlashing={lastAddedIndex === index}
+      flashAnim={flashAnim}
+      onUpdateQuantity={handleUpdateQuantity}
+      onSetQuantity={handleSetQuantity}
+      onRemove={handleRemoveArticle}
+    />
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Custom Header con toggle de escaneo */}
       <Stack.Screen 
         options={{
+          headerTitle: 'Crear Recepción',
           headerRight: () => (
-            <TouchableOpacity 
-              style={[
-                styles.headerScanToggle,
-                { backgroundColor: aggressiveScan ? `${RECEPCION_COLOR}25` : 'transparent' }
-              ]}
-              onPress={() => setAggressiveScan(!aggressiveScan)}
-            >
-              <Ionicons 
-                name={aggressiveScan ? "flash" : "flash-outline"} 
-                size={20} 
-                color={aggressiveScan ? RECEPCION_COLOR : colors.textSecondary} 
-              />
-            </TouchableOpacity>
+            <ScanHeader 
+              color={colors.accent} 
+              aggressiveScan={aggressiveScan} 
+              onToggleScan={setAggressiveScan} 
+            />
           ),
         }}
       />
 
-      {/* Barra de búsqueda compacta en la parte superior */}
-      <View style={[styles.searchBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-        <View style={[styles.searchInputWrapper, { backgroundColor: colors.background, borderColor: aggressiveScan ? RECEPCION_COLOR : colors.border }]}>
-          <Ionicons name="barcode-outline" size={18} color={aggressiveScan ? RECEPCION_COLOR : colors.textSecondary} />
-          <TextInput
-            ref={searchInputRef}
-            style={[styles.searchInput, { color: colors.text }]}
-            placeholder={aggressiveScan ? "Esperando escaneo..." : "Buscar artículo..."}
-            placeholderTextColor={colors.textTertiary}
-            value={searchQuery}
-            onChangeText={handleSearchChange}
-            onSubmitEditing={handleSearchSubmit}
-            autoCapitalize="characters"
-            autoCorrect={false}
-            returnKeyType="search"
-            showSoftInputOnFocus={!aggressiveScan}
-            blurOnSubmit={false}
-            selectTextOnFocus
-          />
-          {isSearching ? (
-            <ActivityIndicator size="small" color={RECEPCION_COLOR} />
-          ) : searchQuery.length > 0 ? (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Ionicons name="close-circle" size={18} color={colors.textTertiary} />
-            </TouchableOpacity>
-          ) : aggressiveScan && (
-            <View style={[styles.scanIndicator, { backgroundColor: RECEPCION_COLOR }]} />
-          )}
-        </View>
-        
-        {!aggressiveScan && searchQuery.trim() && (
-          <TouchableOpacity
-            style={[styles.addBtn, { backgroundColor: RECEPCION_COLOR }]}
-            onPress={handleSearchSubmit}
-            disabled={isSearching}
-          >
-            <Ionicons name="add" size={22} color="#fff" />
-          </TouchableOpacity>
-        )}
-      </View>
+      <ProductSearchBar
+        ref={searchInputRef}
+        value={searchQuery}
+        onChangeText={handleSearchChange}
+        onSubmitEditing={handleSearchSubmit}
+        isSearching={isSearching}
+        aggressiveScan={aggressiveScan}
+        color={colors.accent}
+      />
 
       {/* Info de ubicación flotante (compacta) */}
       <TouchableOpacity 
         style={[styles.locationChip, { backgroundColor: colors.surface, borderColor: colors.border }]}
         onPress={() => setShowLocationModal(true)}
       >
-        <Ionicons name="location" size={14} color={RECEPCION_COLOR} />
+        <Ionicons name="location" size={14} color={colors.accent} />
         <Text style={[styles.locationChipText, { color: colors.text }]} numberOfLines={1}>
           {selectedSucursal && selectedAlmacen 
             ? `${sucursalNombre} · ${almacenNombre}`
@@ -522,8 +454,8 @@ export default function CrearRecepcionScreen() {
         />
       ) : (
         <View style={styles.emptyState}>
-          <View style={[styles.emptyIcon, { backgroundColor: `${RECEPCION_COLOR}15` }]}>
-            <Ionicons name="scan-outline" size={48} color={RECEPCION_COLOR} />
+          <View style={[styles.emptyIcon, { backgroundColor: `${colors.accent}15` }]}>
+            <Ionicons name="scan-outline" size={48} color={colors.accent} />
           </View>
           <Text style={[styles.emptyStateTitle, { color: colors.text }]}>
             {aggressiveScan ? 'Listo para escanear' : 'Busca artículos'}
@@ -549,7 +481,7 @@ export default function CrearRecepcionScreen() {
           style={[
             styles.actionButton, 
             styles.primaryButton, 
-            { backgroundColor: RECEPCION_COLOR },
+            { backgroundColor: colors.accent },
             (!selectedSucursal || !selectedAlmacen || detalles.length === 0) && styles.disabledButton
           ]}
           onPress={handleSave}
@@ -591,7 +523,7 @@ export default function CrearRecepcionScreen() {
                     key={suc.id}
                     style={[
                       styles.locationOption,
-                      { backgroundColor: colors.background, borderColor: selectedSucursal === suc.id ? RECEPCION_COLOR : colors.border },
+                      { backgroundColor: colors.background, borderColor: selectedSucursal === suc.id ? colors.accent : colors.border },
                       selectedSucursal === suc.id && { borderWidth: 2 }
                     ]}
                     onPress={() => setSelectedSucursal(suc.id)}
@@ -599,13 +531,13 @@ export default function CrearRecepcionScreen() {
                     <Ionicons 
                       name="business-outline" 
                       size={20} 
-                      color={selectedSucursal === suc.id ? RECEPCION_COLOR : colors.textSecondary} 
+                      color={selectedSucursal === suc.id ? colors.accent : colors.textSecondary} 
                     />
-                    <Text style={[styles.locationOptionText, { color: selectedSucursal === suc.id ? RECEPCION_COLOR : colors.text }]}>
+                    <Text style={[styles.locationOptionText, { color: selectedSucursal === suc.id ? colors.accent : colors.text }]}>
                       {suc.nombre}
                     </Text>
                     {selectedSucursal === suc.id && (
-                      <Ionicons name="checkmark-circle" size={20} color={RECEPCION_COLOR} />
+                      <Ionicons name="checkmark-circle" size={20} color={colors.accent} />
                     )}
                   </TouchableOpacity>
                 ))}
@@ -620,7 +552,7 @@ export default function CrearRecepcionScreen() {
                       key={alm.id}
                       style={[
                         styles.locationOption,
-                        { backgroundColor: colors.background, borderColor: selectedAlmacen === alm.id ? RECEPCION_COLOR : colors.border },
+                        { backgroundColor: colors.background, borderColor: selectedAlmacen === alm.id ? colors.accent : colors.border },
                         selectedAlmacen === alm.id && { borderWidth: 2 }
                       ]}
                       onPress={() => setSelectedAlmacen(alm.id)}
@@ -628,13 +560,13 @@ export default function CrearRecepcionScreen() {
                       <Ionicons 
                         name="cube-outline" 
                         size={20} 
-                        color={selectedAlmacen === alm.id ? RECEPCION_COLOR : colors.textSecondary} 
+                        color={selectedAlmacen === alm.id ? colors.accent : colors.textSecondary} 
                       />
-                      <Text style={[styles.locationOptionText, { color: selectedAlmacen === alm.id ? RECEPCION_COLOR : colors.text }]}>
+                      <Text style={[styles.locationOptionText, { color: selectedAlmacen === alm.id ? colors.accent : colors.text }]}>
                         {alm.nombre}
                       </Text>
                       {selectedAlmacen === alm.id && (
-                        <Ionicons name="checkmark-circle" size={20} color={RECEPCION_COLOR} />
+                        <Ionicons name="checkmark-circle" size={20} color={colors.accent} />
                       )}
                     </TouchableOpacity>
                   ))}
@@ -645,7 +577,7 @@ export default function CrearRecepcionScreen() {
             {selectedSucursal && selectedAlmacen && (
               <View style={[styles.locationModalFooter, { borderTopColor: colors.border }]}>
                 <TouchableOpacity
-                  style={[styles.locationConfirmBtn, { backgroundColor: RECEPCION_COLOR }]}
+                  style={[styles.locationConfirmBtn, { backgroundColor: colors.accent }]}
                   onPress={() => setShowLocationModal(false)}
                 >
                   <Ionicons name="checkmark" size={20} color="#fff" />
@@ -666,7 +598,7 @@ export default function CrearRecepcionScreen() {
       >
         <View style={styles.summaryModalOverlay}>
           <View style={[styles.summaryModalContent, { backgroundColor: colors.surface }]}>
-            <View style={[styles.summaryModalHeader, { backgroundColor: RECEPCION_COLOR }]}>
+            <View style={[styles.summaryModalHeader, { backgroundColor: colors.accent }]}>
               <Ionicons name="document-text" size={Platform.OS === 'ios' ? 24 : 20} color="#fff" />
               <Text style={styles.summaryModalTitle}>Resumen de Recepción</Text>
             </View>
@@ -689,11 +621,11 @@ export default function CrearRecepcionScreen() {
               <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
               <View style={styles.summaryRow}>
                 <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Artículos</Text>
-                <Text style={[styles.summaryValueBig, { color: RECEPCION_COLOR }]}>{totalArticulos}</Text>
+                <Text style={[styles.summaryValueBig, { color: colors.accent }]}>{totalArticulos}</Text>
               </View>
               <View style={styles.summaryRow}>
                 <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Unidades totales</Text>
-                <Text style={[styles.summaryValueBig, { color: RECEPCION_COLOR }]}>{totalUnidades}</Text>
+                <Text style={[styles.summaryValueBig, { color: colors.accent }]}>{totalUnidades}</Text>
               </View>
             </View>
 
@@ -705,7 +637,7 @@ export default function CrearRecepcionScreen() {
                 <Text style={[styles.summaryCancelBtnText, { color: colors.text }]}>Cancelar</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.summaryBtn, styles.summaryConfirmBtn, { backgroundColor: RECEPCION_COLOR }]}
+                style={[styles.summaryBtn, styles.summaryConfirmBtn, { backgroundColor: colors.accent }]}
                 onPress={handleConfirmSave}
               >
                 <Ionicons name="checkmark" size={18} color="#fff" />

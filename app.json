@@ -2,24 +2,39 @@
   "expo": {
     "name": "KRKN_G",
     "slug": "KRKN_G",
-    "version": "1.0.0",
+    "owner": "fyttsa",
+    "version": "1.0.9",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/ggplay.png",
     "scheme": "krkng",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSBluetoothAlwaysUsageDescription": "Esta app necesita Bluetooth para conectar con impresoras térmicas",
+        "NSBluetoothPeripheralUsageDescription": "Esta app necesita Bluetooth para conectar con impresoras térmicas"
+      }
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "foregroundImage": "./assets/images/ggplay.png",
+        "backgroundImage": "./assets/images/ggplay.png",
+        "monochromeImage": "./assets/images/ggplay.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.RECEIVE_BOOT_COMPLETED"
+      ],
+      "package": "com.black_sheep.KRKN_G"
     },
     "web": {
       "output": "static",
@@ -28,9 +43,17 @@
     "plugins": [
       "expo-router",
       [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/ggplay.png",
+          "color": "#3B82F6",
+          "defaultChannel": "inventarios"
+        }
+      ],
+      [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/ggplay.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
@@ -39,11 +62,24 @@
           }
         }
       ],
-      "expo-video"
+      "expo-video",
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": true,
+          "modes": ["peripheral", "central"]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "61009199-80c7-47f6-9ce6-b74902ece1f8"
+      }
     }
   }
 }

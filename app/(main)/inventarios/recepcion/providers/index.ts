@@ -6,7 +6,7 @@
 export {
     convertirADetallesCachorro, generarMetaCachorro,
     normalizarCodigoEscaneadoCachorro, obtenerResumenTallas, procesarConceptosCachorro, procesarEscaneoCachorro,
-    registrarTallaEscaneada
+    registrarTallaEscaneada, validarProductosCachorro
 } from './cachorro'
 
 // Panam
@@ -20,3 +20,4 @@ export {
     convertirADetallesMundo, generarMetaMundo,
     normalizarCodigoEscaneadoMundo, procesarConceptosMundo, procesarEscaneoMundo
 } from './mundo'
+

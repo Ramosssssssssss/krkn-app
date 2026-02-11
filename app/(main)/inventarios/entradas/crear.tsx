@@ -1,47 +1,44 @@
 import ArticleCard from '@/components/inventarios/ArticleCard';
+import ProductDetailModal from '@/components/inventarios/ProductDetailModal';
 import ProductSearchBar from '@/components/inventarios/ProductSearchBar';
 import ScanHeader from '@/components/inventarios/ScanHeader';
-import { useTheme } from '@/context/theme-context';
+import SearchResultsPicker from '@/components/inventarios/SearchResultsPicker';
+import SuccessModal from '@/components/inventarios/SuccessModal';
+import { useAuth } from '@/context/auth-context';
+import { useThemeColors } from '@/context/theme-context';
 import { useArticleScanner } from '@/hooks/use-article-scanner';
 import { useSucursalesAlmacenes } from '@/hooks/use-sucursales-almacenes';
-import { MOVEMENT_COLORS } from '@/types/inventarios';
+import { crearEntradaInventario, CrearEntradaResponse } from '@/services/inventarios';
 import { Ionicons } from '@expo/vector-icons';
 import { router, Stack } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  FlatList,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    FlatList,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 const { width } = Dimensions.get('window');
-const ENTRADAS_COLOR = MOVEMENT_COLORS.entrada;
 
 export default function CrearEntradaScreen() {
-  const { isDark } = useTheme();
+  const colors = useThemeColors();
+  const { user } = useAuth();
   const [showLocationModal, setShowLocationModal] = useState(true);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
-
-  const theme = {
-    bg: isDark ? '#08050D' : '#FAFAFA',
-    surface: isDark ? '#0D0912' : '#FFFFFF',
-    border: isDark ? '#1C1326' : '#E8E8E8',
-    text: isDark ? '#FFFFFF' : '#1A1A1A',
-    textSecondary: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)',
-    textMuted: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
-    accent: '#9D4EDD',
-    accentDark: '#7B2CBF',
-    accentBg: isDark ? 'rgba(157,78,221,0.12)' : 'rgba(157,78,221,0.08)',
-  };
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successResult, setSuccessResult] = useState<CrearEntradaResponse | null>(null);
+  const [selectedArticleForDetail, setSelectedArticleForDetail] = useState<any | null>(null);
+  const [showProductDetail, setShowProductDetail] = useState(false);
 
   const {
     sucursales,
@@ -69,8 +66,13 @@ export default function CrearEntradaScreen() {
     handleSearchChange,
     handleSearchSubmit,
     handleUpdateQuantity,
+    handleSetQuantity,
     handleRemoveArticle,
     clearArticles,
+    searchAndAddArticle,
+    searchResults,
+    selectFromResults,
+    dismissResults,
   } = useArticleScanner();
 
   const sucursalNombre = sucursales.find((s) => s.id === selectedSucursal)?.nombre || '';
@@ -91,24 +93,63 @@ export default function CrearEntradaScreen() {
     setShowSummaryModal(true);
   };
 
-  const handleConfirmSave = () => {
-    Alert.alert('Guardado', 'Entrada guardada exitosamente', [
-      {
-        text: 'OK',
-        onPress: () => {
-          setShowSummaryModal(false);
-          clearArticles();
-          router.back();
-        },
-      },
-    ]);
+  const handleConfirmSave = async () => {
+    if (isSubmitting) return;
+    
+    setIsSubmitting(true);
+    
+    try {
+      // Generar descripción corta (máximo 50 caracteres)
+      const fechaCorta = new Date().toLocaleDateString('es-MX', {
+        day: '2-digit',
+        month: '2-digit',
+        year: '2-digit',
+      });
+      const nombreUsuario = (user?.NOMBRE || user?.USERNAME || 'Usuario').substring(0, 20);
+      const descripcion = `ENT ${fechaCorta} - ${nombreUsuario}`.substring(0, 50);
+
+      // Preparar detalles para el backend
+      const detallesPayload = detalles.map((d) => ({
+        CLAVE: d.clave,
+        CANTIDAD: d.cantidad,
+      }));
+
+      // Llamar al servicio
+      const result = await crearEntradaInventario({
+        P_SUCURSAL_ID: selectedSucursal!,
+        P_ALMACEN_ID: selectedAlmacen!,
+        P_DESCRIPCION: descripcion,
+        P_USUARIO: nombreUsuario,
+        detalles: detallesPayload,
+      });
+
+      setSuccessResult(result);
+      setShowSummaryModal(false);
+      setShowSuccessModal(true);
+    } catch (error: any) {
+      console.error('❌ Error en crearEntrada:', error);
+      Alert.alert('Error', error?.message || 'No se pudo crear la entrada de inventario');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSuccessClose = () => {
+    setShowSuccessModal(false);
+    clearArticles();
+    router.back();
+  };
+
+  const handleArticlePress = (item: any) => {
+    setSelectedArticleForDetail(item);
+    setShowProductDetail(true);
   };
 
   if (isLoading) {
     return (
-      <View style={[styles.centerContainer, { backgroundColor: theme.bg }]}>
-        <ActivityIndicator size="large" color={ENTRADAS_COLOR} />
-        <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
+      <View style={[styles.centerContainer, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.accent} />
+        <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
           {retryCount > 0 ? `Reintentando... (${retryCount}/3)` : 'Cargando sucursales...'}
         </Text>
       </View>
@@ -117,13 +158,13 @@ export default function CrearEntradaScreen() {
 
   if (error) {
     return (
-      <View style={[styles.centerContainer, { backgroundColor: theme.bg }]}>
+      <View style={[styles.centerContainer, { backgroundColor: colors.background }]}>
         <View style={[styles.errorIcon, { backgroundColor: 'rgba(183, 28, 28, 0.15)' }]}>
           <Ionicons name="cloud-offline-outline" size={40} color="#C62828" />
         </View>
-        <Text style={[styles.errorTitle, { color: theme.text }]}>Error de conexión</Text>
-        <Text style={[styles.errorMessage, { color: theme.textSecondary }]}>{error}</Text>
-        <TouchableOpacity style={[styles.retryButton, { backgroundColor: theme.accent }]} onPress={refresh}>
+        <Text style={[styles.errorTitle, { color: colors.text }]}>Error de conexión</Text>
+        <Text style={[styles.errorMessage, { color: colors.textSecondary }]}>{error}</Text>
+        <TouchableOpacity style={[styles.retryButton, { backgroundColor: colors.accent }]} onPress={refresh}>
           <Ionicons name="refresh" size={18} color="#fff" />
           <Text style={styles.retryButtonText}>Reintentar</Text>
         </TouchableOpacity>
@@ -132,11 +173,11 @@ export default function CrearEntradaScreen() {
   }
 
   return (
-    <GestureHandlerRootView style={[styles.container, { backgroundColor: theme.bg }]}>
+    <GestureHandlerRootView style={[styles.container, { backgroundColor: colors.background }]}>
       <Stack.Screen
         options={{
           headerRight: () => (
-            <ScanHeader color={ENTRADAS_COLOR} aggressiveScan={aggressiveScan} onToggleScan={setAggressiveScan} />
+            <ScanHeader color={colors.accent} aggressiveScan={aggressiveScan} onToggleScan={setAggressiveScan} />
           ),
         }}
       />
@@ -148,27 +189,28 @@ export default function CrearEntradaScreen() {
         onSubmitEditing={handleSearchSubmit}
         isSearching={isSearching}
         aggressiveScan={aggressiveScan}
-        color={ENTRADAS_COLOR}
+        color={colors.accent}
+        searchAndAddArticle={searchAndAddArticle}
       />
 
       {selectedSucursal && selectedAlmacen && (
         <TouchableOpacity
-          style={[styles.locationChip, { backgroundColor: theme.surface, borderColor: theme.border }]}
+          style={[styles.locationChip, { backgroundColor: colors.surface, borderColor: colors.border }]}
           onPress={() => setShowLocationModal(true)}
         >
-          <Ionicons name="location" size={14} color={ENTRADAS_COLOR} />
-          <Text style={[styles.locationChipText, { color: theme.text }]} numberOfLines={1}>
+          <Ionicons name="location" size={14} color={colors.accent} />
+          <Text style={[styles.locationChipText, { color: colors.text }]} numberOfLines={1}>
             {sucursalNombre} → {almacenNombre}
           </Text>
-          <Ionicons name="chevron-down" size={14} color={theme.textSecondary} />
+          <Ionicons name="chevron-down" size={14} color={colors.textSecondary} />
         </TouchableOpacity>
       )}
 
       {detalles.length > 0 ? (
         <>
-          <View style={[styles.articlesHeader, { borderBottomColor: theme.border }]}>
-            <Text style={[styles.articlesHeaderTitle, { color: theme.text }]}>Artículos ({totalArticulos})</Text>
-            <Text style={[styles.articlesHeaderTotal, { color: theme.textSecondary }]}>
+          <View style={[styles.articlesHeader, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.articlesHeaderTitle, { color: colors.text }]}>Artículos ({totalArticulos})</Text>
+            <Text style={[styles.articlesHeaderTotal, { color: colors.textSecondary }]}>
               {totalUnidades} unidades
             </Text>
           </View>
@@ -181,11 +223,13 @@ export default function CrearEntradaScreen() {
               <ArticleCard
                 item={item}
                 index={index}
-                color={ENTRADAS_COLOR}
+                color={colors.accent}
                 isFlashing={lastAddedIndex === index}
                 flashAnim={flashAnim}
                 onUpdateQuantity={handleUpdateQuantity}
+                onSetQuantity={handleSetQuantity}
                 onRemove={handleRemoveArticle}
+                onPress={handleArticlePress}
               />
             )}
             style={styles.articlesList}
@@ -194,30 +238,30 @@ export default function CrearEntradaScreen() {
         </>
       ) : (
         <View style={styles.emptyState}>
-          <View style={[styles.emptyIcon, { backgroundColor: `${ENTRADAS_COLOR}15` }]}>
-            <Ionicons name="scan-outline" size={36} color={ENTRADAS_COLOR} />
+          <View style={[styles.emptyIcon, { backgroundColor: `${colors.accent}15` }]}>
+            <Ionicons name="scan-outline" size={36} color={colors.accent} />
           </View>
-          <Text style={[styles.emptyStateTitle, { color: theme.text }]}>
+          <Text style={[styles.emptyStateTitle, { color: colors.text }]}>
             {aggressiveScan ? 'Listo para escanear' : 'Busca artículos'}
           </Text>
-          <Text style={[styles.emptyStateText, { color: theme.textSecondary }]}>
+          <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
             {aggressiveScan ? 'Escanea códigos de barras con tu PDA' : 'Escribe el código y presiona agregar'}
           </Text>
         </View>
       )}
 
-      <View style={[styles.bottomActions, { backgroundColor: theme.surface, borderTopColor: theme.border }]}>
+      <View style={[styles.bottomActions, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
         <TouchableOpacity
-          style={[styles.actionButton, styles.secondaryButton, { borderColor: theme.border }]}
+          style={[styles.actionButton, styles.secondaryButton, { borderColor: colors.border }]}
           onPress={() => router.back()}
         >
-          <Text style={[styles.secondaryButtonText, { color: theme.textSecondary }]}>Cancelar</Text>
+          <Text style={[styles.secondaryButtonText, { color: colors.textSecondary }]}>Cancelar</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[
             styles.actionButton,
             styles.primaryButton,
-            { backgroundColor: ENTRADAS_COLOR },
+            { backgroundColor: colors.accent },
             (!selectedSucursal || !selectedAlmacen || detalles.length === 0) && styles.disabledButton,
           ]}
           onPress={handleSave}
@@ -240,29 +284,29 @@ export default function CrearEntradaScreen() {
         }}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.locationModalContent, { backgroundColor: theme.surface }]}>
-            <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
-              <Text style={[styles.modalTitle, { color: theme.text }]}>Seleccionar ubicación</Text>
+          <View style={[styles.locationModalContent, { backgroundColor: colors.surface }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Seleccionar ubicación</Text>
               {selectedSucursal && selectedAlmacen && (
                 <TouchableOpacity
-                  style={[styles.modalClose, { backgroundColor: theme.accentBg }]}
+                  style={[styles.modalClose, { backgroundColor: colors.accentLight }]}
                   onPress={() => setShowLocationModal(false)}
                 >
-                  <Ionicons name="close" size={18} color={theme.textSecondary} />
+                  <Ionicons name="close" size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
               )}
             </View>
 
             <ScrollView style={styles.fieldGroup}>
-              <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>Sucursal</Text>
+              <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Sucursal</Text>
               {sucursales.map((suc) => (
                 <TouchableOpacity
                   key={suc.id}
                   style={[
                     styles.locationOption,
                     {
-                      backgroundColor: theme.bg,
-                      borderColor: selectedSucursal === suc.id ? ENTRADAS_COLOR : theme.border,
+                      backgroundColor: colors.background,
+                      borderColor: selectedSucursal === suc.id ? colors.accent : colors.border,
                     },
                     selectedSucursal === suc.id && { borderWidth: 2 },
                   ]}
@@ -271,31 +315,31 @@ export default function CrearEntradaScreen() {
                   <Ionicons
                     name="business-outline"
                     size={20}
-                    color={selectedSucursal === suc.id ? ENTRADAS_COLOR : theme.textSecondary}
+                    color={selectedSucursal === suc.id ? colors.accent : colors.textSecondary}
                   />
                   <Text
                     style={[
                       styles.locationOptionText,
-                      { color: selectedSucursal === suc.id ? ENTRADAS_COLOR : theme.text },
+                      { color: selectedSucursal === suc.id ? colors.accent : colors.text },
                     ]}
                   >
                     {suc.nombre}
                   </Text>
-                  {selectedSucursal === suc.id && <Ionicons name="checkmark-circle" size={20} color={ENTRADAS_COLOR} />}
+                  {selectedSucursal === suc.id && <Ionicons name="checkmark-circle" size={20} color={colors.accent} />}
                 </TouchableOpacity>
               ))}
 
               {selectedSucursal && (
                 <View style={styles.fieldGroup}>
-                  <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>Almacén</Text>
+                  <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Almacén</Text>
                   {almacenesFiltrados.map((alm) => (
                     <TouchableOpacity
                       key={alm.id}
                       style={[
                         styles.locationOption,
                         {
-                          backgroundColor: theme.bg,
-                          borderColor: selectedAlmacen === alm.id ? ENTRADAS_COLOR : theme.border,
+                          backgroundColor: colors.background,
+                          borderColor: selectedAlmacen === alm.id ? colors.accent : colors.border,
                         },
                         selectedAlmacen === alm.id && { borderWidth: 2 },
                       ]}
@@ -304,17 +348,17 @@ export default function CrearEntradaScreen() {
                       <Ionicons
                         name="cube-outline"
                         size={20}
-                        color={selectedAlmacen === alm.id ? ENTRADAS_COLOR : theme.textSecondary}
+                        color={selectedAlmacen === alm.id ? colors.accent : colors.textSecondary}
                       />
                       <Text
                         style={[
                           styles.locationOptionText,
-                          { color: selectedAlmacen === alm.id ? ENTRADAS_COLOR : theme.text },
+                          { color: selectedAlmacen === alm.id ? colors.accent : colors.text },
                         ]}
                       >
                         {alm.nombre}
                       </Text>
-                      {selectedAlmacen === alm.id && <Ionicons name="checkmark-circle" size={20} color={ENTRADAS_COLOR} />}
+                      {selectedAlmacen === alm.id && <Ionicons name="checkmark-circle" size={20} color={colors.accent} />}
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -322,9 +366,9 @@ export default function CrearEntradaScreen() {
             </ScrollView>
 
             {selectedSucursal && selectedAlmacen && (
-              <View style={[styles.locationModalFooter, { borderTopColor: theme.border }]}>
+              <View style={[styles.locationModalFooter, { borderTopColor: colors.border }]}>
                 <TouchableOpacity
-                  style={[styles.locationConfirmBtn, { backgroundColor: ENTRADAS_COLOR }]}
+                  style={[styles.locationConfirmBtn, { backgroundColor: colors.accent }]}
                   onPress={() => setShowLocationModal(false)}
                 >
                   <Ionicons name="checkmark" size={20} color="#fff" />
@@ -339,24 +383,24 @@ export default function CrearEntradaScreen() {
       {/* Modal de resumen */}
       <Modal visible={showSummaryModal} transparent animationType="fade" onRequestClose={() => setShowSummaryModal(false)}>
         <View style={styles.summaryModalOverlay}>
-          <View style={[styles.summaryModalContent, { backgroundColor: theme.surface }]}>
-            <View style={[styles.summaryModalHeader, { backgroundColor: ENTRADAS_COLOR }]}>
+          <View style={[styles.summaryModalContent, { backgroundColor: colors.surface }]}>
+            <View style={[styles.summaryModalHeader, { backgroundColor: colors.accent }]}>
               <Ionicons name="document-text" size={Platform.OS === 'ios' ? 24 : 20} color="#fff" />
               <Text style={styles.summaryModalTitle}>Resumen de Entrada</Text>
             </View>
 
             <View style={styles.summaryModalBody}>
               <View style={styles.summaryRow}>
-                <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>Sucursal</Text>
-                <Text style={[styles.summaryValue, { color: theme.text }]}>{sucursalNombre}</Text>
+                <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Sucursal</Text>
+                <Text style={[styles.summaryValue, { color: colors.text }]}>{sucursalNombre}</Text>
               </View>
               <View style={styles.summaryRow}>
-                <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>Almacén</Text>
-                <Text style={[styles.summaryValue, { color: theme.text }]}>{almacenNombre}</Text>
+                <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Almacén</Text>
+                <Text style={[styles.summaryValue, { color: colors.text }]}>{almacenNombre}</Text>
               </View>
               <View style={styles.summaryRow}>
-                <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>Fecha</Text>
-                <Text style={[styles.summaryValue, { color: theme.text }]}>
+                <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Fecha</Text>
+                <Text style={[styles.summaryValue, { color: colors.text }]}>
                   {new Date().toLocaleDateString('es-MX', {
                     day: '2-digit',
                     month: 'short',
@@ -366,35 +410,75 @@ export default function CrearEntradaScreen() {
                   })}
                 </Text>
               </View>
-              <View style={[styles.summaryDivider, { backgroundColor: theme.border }]} />
+              <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
               <View style={styles.summaryRow}>
-                <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>Artículos</Text>
-                <Text style={[styles.summaryValueBig, { color: ENTRADAS_COLOR }]}>{totalArticulos}</Text>
+                <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Artículos</Text>
+                <Text style={[styles.summaryValueBig, { color: colors.accent }]}>{totalArticulos}</Text>
               </View>
               <View style={styles.summaryRow}>
-                <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>Unidades totales</Text>
-                <Text style={[styles.summaryValueBig, { color: ENTRADAS_COLOR }]}>{totalUnidades}</Text>
+                <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Unidades totales</Text>
+                <Text style={[styles.summaryValueBig, { color: colors.accent }]}>{totalUnidades}</Text>
               </View>
             </View>
 
             <View style={styles.summaryModalFooter}>
               <TouchableOpacity
-                style={[styles.summaryBtn, styles.summaryCancelBtn, { borderColor: theme.border }]}
+                style={[styles.summaryBtn, styles.summaryCancelBtn, { borderColor: colors.border }]}
                 onPress={() => setShowSummaryModal(false)}
+                disabled={isSubmitting}
               >
-                <Text style={[styles.summaryCancelBtnText, { color: theme.text }]}>Cancelar</Text>
+                <Text style={[styles.summaryCancelBtnText, { color: colors.text }]}>Cancelar</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.summaryBtn, styles.summaryConfirmBtn, { backgroundColor: ENTRADAS_COLOR }]}
+                style={[
+                  styles.summaryBtn,
+                  styles.summaryConfirmBtn,
+                  { backgroundColor: colors.accent },
+                  isSubmitting && { opacity: 0.7 },
+                ]}
                 onPress={handleConfirmSave}
+                disabled={isSubmitting}
               >
-                <Ionicons name="checkmark" size={18} color="#fff" />
-                <Text style={styles.summaryConfirmBtnText}>Confirmar</Text>
+                {isSubmitting ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Ionicons name="checkmark" size={18} color="#fff" />
+                )}
+                <Text style={styles.summaryConfirmBtnText}>
+                  {isSubmitting ? 'Guardando...' : 'Confirmar'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
+
+      {/* Modal de éxito con Lottie */}
+      <SuccessModal
+        visible={showSuccessModal}
+        onClose={handleSuccessClose}
+        folio={successResult?.folio || null}
+        doctoInId={successResult?.doctoInId}
+        inserted={successResult?.inserted}
+        warnings={successResult?.warnings}
+        title="¡Entrada Creada!"
+        subtitle="El movimiento se registró correctamente"
+        type="entrada"
+      />
+
+      <ProductDetailModal 
+        visible={showProductDetail}
+        articulo={selectedArticleForDetail}
+        onClose={() => setShowProductDetail(false)}
+      />
+
+      <SearchResultsPicker
+        visible={searchResults.length > 0}
+        results={searchResults}
+        color={colors.accent}
+        onSelect={selectFromResults}
+        onDismiss={dismissResults}
+      />
     </GestureHandlerRootView>
   );
 }

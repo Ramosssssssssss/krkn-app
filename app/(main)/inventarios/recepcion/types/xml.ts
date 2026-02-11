@@ -69,6 +69,8 @@ export interface ProductoXML {
   _role?: string
   /** Lista de códigos largos (CACHORRO - tallas) */
   _codigosLargos?: string[]
+  /** Claves Microsip asignadas con conteo (clave -> cantidad escaneada) */
+  _clavesMicrosipAsignadas?: Record<string, number>
 }
 
 // ============================================
@@ -186,4 +188,53 @@ export interface XMLDraft {
   requireScan: boolean
   cachorroTallas?: CachorroTallasMap
   savedAt: number
+}
+
+// ============================================
+// INTERFACES PARA CREAR ARTÍCULO
+// ============================================
+
+/** Línea de artículo (para dropdown) */
+export interface LineaArticulo {
+  id: number
+  nombre: string
+}
+
+/** Payload para crear un artículo nuevo */
+export interface CrearArticuloPayload {
+  databaseId?: number
+  P_NOMBRE: string
+  P_LINEA_ARTICULO_ID: number
+  P_UNIDAD_VENTA: 'PAR' | 'PZA'
+  P_UNIDAD_COMPRA: 'PAR' | 'PZA'
+  P_IMAGEN?: string
+  P_CLAVE_ARTICULO: string
+  P_CLAVE_BARRAS: string
+  P_ALMACEN_ID: number
+  P_LOCALIZACION?: string
+  P_INVENTARIO_MAXIMO?: number
+  P_PUNTO_REORDEN?: number
+  P_INVENTARIO_MINIMO?: number
+  P_PRECIO_LISTA?: number
+  P_PRECIO_DISTRIBUIDOR?: number
+  P_NOM_IMPUESTO: 'NO SUJETO DEL IMPUESTO' | 'IVA 16%' | 'IVA 0%'
+  P_MARCA?: string
+  /** Código largo alternativo */
+  P_CODIGO_LARGO?: string
+  /** Nombre corto para tickets (max 30 chars) */
+  P_NOMBRE_TICKET?: string
+  /** Código XML del proveedor */
+  P_CODIGO_XML?: string
+  /** Proveedor del artículo */
+  P_PROVEEDOR?: string
+  /** Talla del artículo */
+  P_TALLA?: string
+}
+
+/** Respuesta al crear artículo */
+export interface CrearArticuloResponse {
+  ok: boolean
+  message: string
+  clave?: string
+  codigoBarras?: string
 }

@@ -4,9 +4,12 @@ import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
 export default function Index() {
-  const { isAuthenticated, companyCode } = useAuth();
+  const { isAuthenticated, companyCode, isLoading } = useAuth();
 
   useEffect(() => {
+    // Esperar a que se cargue la sesión guardada
+    if (isLoading) return;
+
     // Usar router.replace en vez de Redirect para mejor control
     const timeout = setTimeout(() => {
       if (isAuthenticated) {
@@ -19,9 +22,9 @@ export default function Index() {
     }, 100);
 
     return () => clearTimeout(timeout);
-  }, [isAuthenticated, companyCode]);
+  }, [isAuthenticated, companyCode, isLoading]);
 
-  // Mostrar loading mientras redirige
+  // Mostrar loading mientras carga la sesión o redirige
   return (
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' }}>
       <ActivityIndicator size="large" color="#fff" />
