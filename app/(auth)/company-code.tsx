@@ -158,6 +158,10 @@ export default function CompanyCodeScreen() {
           data.company,
           data.databases,
         );
+        // Auto-seleccionar la primera base de datos
+        if (data.databases.length > 0) {
+          selectDatabase(data.databases[0]);
+        }
         router.push("/(auth)/login");
       } else {
         setError(data.message || "Código de empresa no encontrado");

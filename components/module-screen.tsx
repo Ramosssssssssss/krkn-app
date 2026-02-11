@@ -1,11 +1,10 @@
-    
-import { useThemeColors } from '@/context/theme-context';
-import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import { useThemeColors } from "@/context/theme-context";
+import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
 import {
     Animated,
+    Dimensions,
     LayoutAnimation,
     Platform,
     ScrollView,
@@ -14,12 +13,21 @@ import {
     TouchableOpacity,
     UIManager,
     View,
-} from 'react-native';
+} from "react-native";
 
 // Habilitar LayoutAnimation en Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
+
+// Grid dimensions
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const GRID_PAD = 16;
+const GRID_GAP = 12;
+const CARD_W = (SCREEN_WIDTH - GRID_PAD * 2 - GRID_GAP) / 2;
 
 // ==================== TIPOS ====================
 export interface SubMenuItem {
@@ -98,7 +106,7 @@ export default function ModuleScreen({ config }: ModuleScreenProps) {
       }),
     ]).start();
   }, []);
-  
+
   const toggleGroup = (group: ModuleGroup) => {
     // Si tiene onPress custom, ejecutarlo
     if (group.onPress) {
@@ -107,7 +115,7 @@ export default function ModuleScreen({ config }: ModuleScreenProps) {
     }
 
     const hasModules = group.modules && group.modules.length > 0;
-    
+
     // Si no tiene modules, navegar directamente a la ruta del grupo
     if (!hasModules) {
       if (group.route) {
@@ -115,7 +123,7 @@ export default function ModuleScreen({ config }: ModuleScreenProps) {
       }
       return;
     }
-    
+
     // Si tiene modules, expandir/colapsar
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedGroup(expandedGroup === group.id ? null : group.id);
@@ -130,9 +138,9 @@ export default function ModuleScreen({ config }: ModuleScreenProps) {
       module.onPress();
       return;
     }
-    
+
     const hasSubItems = module.subItems && module.subItems.length > 0;
-    
+
     // Si no tiene subItems, navegar directamente a la ruta del módulo
     if (!hasSubItems) {
       if (module.route) {
@@ -140,13 +148,13 @@ export default function ModuleScreen({ config }: ModuleScreenProps) {
       }
       return;
     }
-    
+
     // Si el módulo tiene solo un subItem, navegar directamente
     if (module.subItems!.length === 1) {
       router.push(module.subItems![0].route as any);
       return;
     }
-    
+
     // Si tiene múltiples subItems, expandir/colapsar
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedModule(expandedModule === module.id ? null : module.id);
@@ -155,188 +163,265 @@ export default function ModuleScreen({ config }: ModuleScreenProps) {
   const handleSubItemPress = (route: string) => {
     router.push(route as any);
   };
-  
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView 
+      <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={[styles.headerIcon, { borderColor: colors.border }]}>
-              <Ionicons name={config.headerIcon as any} size={20} color={colors.accent} />
+        <Animated.View
+          style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}
+        >
+          {/* Hero spotlight */}
+          <View style={styles.hero}>
+            <View
+              style={[
+                styles.heroIconOuter,
+                { backgroundColor: `${colors.accent}10` },
+              ]}
+            >
+              <View
+                style={[
+                  styles.heroIconInner,
+                  { backgroundColor: `${colors.accent}18` },
+                ]}
+              >
+                <Ionicons
+                  name={config.headerIcon as any}
+                  size={28}
+                  color={colors.accent}
+                />
+              </View>
             </View>
-            <View style={styles.headerInfo}>
-              <Text style={[styles.headerTitle, { color: colors.text }]}>{config.headerTitle}</Text>
-              <Text style={[styles.headerSubtitle, { color: colors.textTertiary }]}>
+            <View style={styles.heroText}>
+              <Text
+                style={[styles.heroSubtitle, { color: colors.textSecondary }]}
+              >
                 {config.headerSubtitle}
+              </Text>
+              <Text style={[styles.heroCount, { color: colors.textTertiary }]}>
+                {config.groups.length}{" "}
+                {config.groups.length === 1
+                  ? "módulo disponible"
+                  : "módulos disponibles"}
               </Text>
             </View>
           </View>
 
-          {/* Quick Stats (opcional) */}
+          {/* Quick Stats */}
           {config.stats && config.stats.length > 0 && (
-            <View style={[styles.statsCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <LinearGradient
-                colors={['transparent', `${colors.accent}50`, 'transparent']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.cardGlow}
-              />
-              <View style={styles.statsGrid}>
-                {config.stats.map((stat, index) => (
-                  <React.Fragment key={stat.label}>
-                    <StatItemComponent 
-                      value={stat.value} 
-                      label={stat.label} 
-                      sublabel={stat.sublabel || ''} 
-                      colors={colors} 
-                    />
-                    {index < config.stats!.length - 1 && (
-                      <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
-                    )}
-                  </React.Fragment>
-                ))}
-              </View>
+            <View style={styles.statsRow}>
+              {config.stats.map((stat) => (
+                <View
+                  key={stat.label}
+                  style={[
+                    styles.statPill,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  <StatItemComponent
+                    value={stat.value}
+                    label={stat.label}
+                    sublabel={stat.sublabel || ""}
+                    colors={colors}
+                  />
+                </View>
+              ))}
             </View>
           )}
 
           {/* Section Label */}
-          <Text style={[styles.sectionLabel, { color: colors.textTertiary }]}>{config.sectionLabel}</Text>
+          {config.sectionLabel ? (
+            <Text style={[styles.sectionLabel, { color: colors.textTertiary }]}>
+              {config.sectionLabel}
+            </Text>
+          ) : null}
 
-          {/* Groups */}
-          {config.groups.map((group) => {
-            const isGroupExpanded = expandedGroup === group.id;
-            const hasModules = group.modules && group.modules.length > 0;
-            
-            return (
-              <View 
-                key={group.id} 
-                style={[
-                  styles.groupCard, 
-                  { 
-                    backgroundColor: colors.surface, 
-                    borderColor: isGroupExpanded ? colors.accent : colors.border,
-                  }
-                ]}
-              >
-                {/* Group Header */}
+          {/* Grid of Cards */}
+          <View style={styles.grid}>
+            {config.groups.map((group) => {
+              const isExpanded = expandedGroup === group.id;
+              const hasModules = group.modules && group.modules.length > 0;
+
+              return (
                 <TouchableOpacity
-                  style={styles.groupHeader}
+                  key={group.id}
+                  style={[
+                    styles.card,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    },
+                    isExpanded && {
+                      borderColor: group.color,
+                      borderWidth: 1.5,
+                    },
+                  ]}
                   activeOpacity={0.7}
                   onPress={() => toggleGroup(group)}
                 >
-                  <View style={[styles.groupIcon, { backgroundColor: `${group.color}15` }]}>
-                    <Ionicons name={group.icon as any} size={22} color={group.color} />
-                  </View>
-                  <View style={styles.groupContent}>
-                    <Text style={[styles.groupTitle, { color: colors.text }]}>{group.title}</Text>
-                    <Text style={[styles.groupSubtitle, { color: colors.textTertiary }]}>
-                      {hasModules 
-                        ? `${group.modules!.length} ${group.modules!.length === 1 ? 'opción disponible' : 'opciones disponibles'}`
-                        : group.subtitle || 'Acceso directo'
-                      }
-                    </Text>
-                  </View>
-                  {hasModules ? (
-                    <Ionicons 
-                      name={isGroupExpanded ? 'chevron-up' : 'chevron-down'} 
-                      size={20} 
-                      color={isGroupExpanded ? group.color : colors.textTertiary} 
+                  <View
+                    style={[
+                      styles.cardIconWrap,
+                      { backgroundColor: `${group.color}14` },
+                    ]}
+                  >
+                    <Ionicons
+                      name={group.icon as any}
+                      size={26}
+                      color={group.color}
                     />
-                  ) : (
-                    <Ionicons 
-                      name="chevron-forward" 
-                      size={20} 
-                      color={colors.textTertiary} 
-                    />
+                  </View>
+                  <Text
+                    style={[styles.cardTitle, { color: colors.text }]}
+                    numberOfLines={1}
+                  >
+                    {group.title}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.cardSubtitle,
+                      { color: colors.textTertiary },
+                    ]}
+                    numberOfLines={2}
+                  >
+                    {hasModules
+                      ? `${group.modules!.length} ${group.modules!.length === 1 ? "opción" : "opciones"}`
+                      : group.subtitle || "Acceso directo"}
+                  </Text>
+                  {hasModules && (
+                    <View
+                      style={[
+                        styles.cardBadge,
+                        { backgroundColor: `${group.color}18` },
+                      ]}
+                    >
+                      <Ionicons
+                        name={isExpanded ? "chevron-up" : "grid-outline"}
+                        size={12}
+                        color={group.color}
+                      />
+                    </View>
                   )}
                 </TouchableOpacity>
+              );
+            })}
+          </View>
 
-                {/* Modules inside group - Solo si tiene módulos */}
-                {isGroupExpanded && hasModules && (
-                  <View style={[styles.modulesContainer, { borderTopColor: colors.border }]}>
-                    {group.modules!.map((module) => {
-                      const isModuleExpanded = expandedModule === module.id;
-                      const hasSubItems = module.subItems && module.subItems.length > 1;
-                      
-                      return (
-                        <View key={module.id} style={styles.moduleWrapper}>
-                          {/* Module Item */}
-                          <TouchableOpacity
-                            style={[
-                              styles.moduleItem,
-                              isModuleExpanded && hasSubItems && { backgroundColor: `${module.color}08` }
-                            ]}
-                            activeOpacity={0.7}
-                            onPress={() => toggleModule(module)}
-                          >
-                            <View style={[styles.moduleIcon, { backgroundColor: `${module.color}15` }]}>
-                              <Ionicons name={module.icon as any} size={18} color={module.color} />
-                            </View>
-                            <View style={styles.moduleContent}>
-                              <View style={styles.moduleTitleRow}>
-                                <Text style={[styles.moduleTitle, { color: colors.text }]}>{module.title}</Text>
-                                <View style={[styles.colorDot, { backgroundColor: module.color }]} />
-                              </View>
-                              <Text style={[styles.moduleSubtitle, { color: colors.textTertiary }]}>{module.subtitle}</Text>
-                            </View>
-                            {hasSubItems ? (
-                              <Ionicons 
-                                name={isModuleExpanded ? 'chevron-up' : 'chevron-down'} 
-                                size={16} 
-                                color={isModuleExpanded ? module.color : colors.textTertiary} 
-                              />
-                            ) : (
-                              <Ionicons 
-                                name="chevron-forward" 
-                                size={16} 
-                                color={colors.textTertiary} 
-                              />
-                            )}
-                          </TouchableOpacity>
+          {/* Expanded Modules Panel */}
+          {config.groups.map((group) => {
+            const isExpanded = expandedGroup === group.id;
+            const hasModules = group.modules && group.modules.length > 0;
+            if (!isExpanded || !hasModules) return null;
 
-                          {/* Sub Items - Solo si tiene más de 1 */}
-                          {isModuleExpanded && hasSubItems && module.subItems && (
-                            <View style={[styles.subItemsContainer, { borderTopColor: colors.border }]}>
-                              {module.subItems.map((subItem, subIndex) => (
-                                <TouchableOpacity
-                                  key={subItem.id}
-                                  style={[
-                                    styles.subItem,
-                                    subIndex !== module.subItems!.length - 1 && { 
-                                      borderBottomWidth: 1, 
-                                      borderBottomColor: colors.border 
-                                    }
-                                  ]}
-                                  activeOpacity={0.6}
-                                  onPress={() => handleSubItemPress(subItem.route)}
-                                >
-                                  <Ionicons name={subItem.icon as any} size={14} color={module.color} />
-                                  <Text style={[styles.subItemTitle, { color: colors.text }]}>{subItem.title}</Text>
-                                  <Ionicons name="chevron-forward" size={12} color={colors.textTertiary} />
-                                </TouchableOpacity>
-                              ))}
-                            </View>
-                          )}
+            return (
+              <View
+                key={`${group.id}-modules`}
+                style={[
+                  styles.expandedPanel,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <View style={styles.expandedHeader}>
+                  <View
+                    style={[
+                      styles.expandedDot,
+                      { backgroundColor: group.color },
+                    ]}
+                  />
+                  <Text style={[styles.expandedTitle, { color: colors.text }]}>
+                    {group.title}
+                  </Text>
+                </View>
+                {group.modules!.map((module, idx) => {
+                  const isModuleExpanded = expandedModule === module.id;
+                  const hasSubItems =
+                    module.subItems && module.subItems.length > 1;
+                  const isLast = idx === group.modules!.length - 1;
+
+                  return (
+                    <View key={module.id}>
+                      <TouchableOpacity
+                        style={styles.moduleRow}
+                        activeOpacity={0.6}
+                        onPress={() => toggleModule(module)}
+                      >
+                        <View
+                          style={[
+                            styles.moduleDot,
+                            { backgroundColor: module.color },
+                          ]}
+                        />
+                        <Text
+                          style={[styles.moduleText, { color: colors.text }]}
+                        >
+                          {module.title}
+                        </Text>
+                        <Ionicons
+                          name={
+                            hasSubItems
+                              ? isModuleExpanded
+                                ? "chevron-up"
+                                : "chevron-down"
+                              : "chevron-forward"
+                          }
+                          size={14}
+                          color={colors.textTertiary}
+                        />
+                      </TouchableOpacity>
+                      {isModuleExpanded && hasSubItems && module.subItems && (
+                        <View style={styles.subChipsWrap}>
+                          {module.subItems.map((sub) => (
+                            <TouchableOpacity
+                              key={sub.id}
+                              style={[
+                                styles.subChip,
+                                { borderColor: colors.border },
+                              ]}
+                              activeOpacity={0.6}
+                              onPress={() => handleSubItemPress(sub.route)}
+                            >
+                              <Ionicons
+                                name={sub.icon as any}
+                                size={13}
+                                color={module.color}
+                              />
+                              <Text
+                                style={[
+                                  styles.subChipText,
+                                  { color: colors.textSecondary },
+                                ]}
+                              >
+                                {sub.title}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
                         </View>
-                      );
-                    })}
-                  </View>
-                )}
+                      )}
+                      {!isLast && (
+                        <View
+                          style={[
+                            styles.moduleSep,
+                            { backgroundColor: colors.border },
+                          ]}
+                        />
+                      )}
+                    </View>
+                  );
+                })}
               </View>
             );
           })}
         </Animated.View>
       </ScrollView>
-
-      {/* Footer */}
-      <View style={[styles.footerContainer, { borderTopColor: colors.border }]}>
-        <Text style={[styles.footer, { color: colors.textTertiary }]}>KRKN WMS v1.0.0</Text>
-      </View>
     </View>
   );
 }
@@ -358,44 +443,49 @@ function AnimatedPulse({ colors }: { colors: any }) {
           duration: 800,
           useNativeDriver: true,
         }),
-      ])
+      ]),
     ).start();
   }, []);
 
   return (
-    <Animated.View 
-      style={{ 
-        opacity: pulseAnim, 
+    <Animated.View
+      style={{
+        opacity: pulseAnim,
         transform: [{ scale: pulseAnim }],
-        flexDirection: 'row',
+        flexDirection: "row",
         gap: 3,
-        alignItems: 'center',
+        alignItems: "center",
         height: 26,
       }}
     >
       {[0, 1, 2].map((i) => (
-        <View 
-          key={i} 
-          style={{ 
-            width: 5, 
-            height: 5, 
-            borderRadius: 2.5, 
-            backgroundColor: colors.textTertiary 
-          }} 
+        <View
+          key={i}
+          style={{
+            width: 5,
+            height: 5,
+            borderRadius: 2.5,
+            backgroundColor: colors.textTertiary,
+          }}
         />
       ))}
     </Animated.View>
   );
 }
 
-function StatItemComponent({ value, label, sublabel, colors }: { 
-  value: string; 
-  label: string; 
+function StatItemComponent({
+  value,
+  label,
+  sublabel,
+  colors,
+}: {
+  value: string;
+  label: string;
   sublabel: string;
   colors: any;
 }) {
-  const isLoading = value === '...';
-  
+  const isLoading = value === "...";
+
   return (
     <View style={styles.statItem}>
       {isLoading ? (
@@ -403,9 +493,13 @@ function StatItemComponent({ value, label, sublabel, colors }: {
       ) : (
         <Text style={[styles.statValue, { color: colors.text }]}>{value}</Text>
       )}
-      <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{label}</Text>
+      <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+        {label}
+      </Text>
       {sublabel ? (
-        <Text style={[styles.statSublabel, { color: colors.textTertiary }]}>{sublabel}</Text>
+        <Text style={[styles.statSublabel, { color: colors.textTertiary }]}>
+          {sublabel}
+        </Text>
       ) : null}
     </View>
   );
@@ -413,192 +507,220 @@ function StatItemComponent({ value, label, sublabel, colors }: {
 
 // ==================== ESTILOS ====================
 const styles = StyleSheet.create({
-  container: { 
+  container: {
     flex: 1,
   },
   scrollView: {
     flex: 1,
   },
-  content: { 
-    padding: 20,
-    paddingTop: 16,
-    paddingBottom: 20,
+  content: {
+    padding: GRID_PAD,
+    paddingTop: 12,
+    paddingBottom: 40,
   },
-  // Header
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  // Hero spotlight
+  hero: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 20,
+    gap: 14,
+  },
+  heroIconOuter: {
+    width: 60,
+    height: 60,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  heroIconInner: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  heroText: {
+    flex: 1,
+  },
+  heroSubtitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    letterSpacing: -0.2,
+  },
+  heroCount: {
+    fontSize: 12,
+    fontWeight: "500",
+    marginTop: 3,
+  },
+  // Stats - individual pills
+  statsRow: {
+    flexDirection: "row",
+    gap: 8,
     marginBottom: 20,
   },
-  headerIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerInfo: {
-    marginLeft: 14,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  // Stats
-  statsCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    overflow: 'hidden',
-    marginBottom: 8,
-  },
-  cardGlow: {
-    position: 'absolute',
-    top: 0,
-    left: 20,
-    right: 20,
-    height: 1,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    paddingVertical: 18,
+  statPill: {
+    flex: 1,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
   },
   statItem: {
-    flex: 1,
-    alignItems: 'center',
+    alignItems: "center",
   },
   statValue: {
-    fontSize: 22,
-    fontWeight: '700',
+    fontSize: 18,
+    fontWeight: "700",
   },
   statLabel: {
-    fontSize: 12,
-    marginTop: 4,
+    fontSize: 10,
+    marginTop: 2,
+    fontWeight: "500",
   },
   statSublabel: {
-    fontSize: 10,
-  },
-  statDivider: {
-    width: 1,
-    height: 36,
-    alignSelf: 'center',
+    fontSize: 9,
   },
   // Section
   sectionLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 1,
-    marginTop: 16,
-    marginBottom: 12,
-    marginLeft: 4,
-  },
-  // Group Cards
-  groupCard: { 
-    borderRadius: 14, 
-    borderWidth: 1,
-    overflow: 'hidden',
-    marginBottom: 10,
-  },
-  groupHeader: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    padding: 14,
-  },
-  groupIcon: { 
-    width: 44, 
-    height: 44, 
-    borderRadius: 12, 
-    justifyContent: 'center', 
-    alignItems: 'center',
-  },
-  groupContent: { 
-    flex: 1, 
-    marginLeft: 12,
-  },
-  groupTitle: { 
-    fontSize: 16, 
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: "600",
     letterSpacing: 0.5,
+    marginBottom: 14,
+    textTransform: "uppercase",
   },
-  groupSubtitle: { 
-    fontSize: 12, 
-    marginTop: 2,
+  // Grid
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: GRID_GAP,
   },
-  // Modules Container
-  modulesContainer: {
-    borderTopWidth: 1,
-    paddingVertical: 4,
+  // Cards
+  card: {
+    width: CARD_W,
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 18,
+    paddingTop: 24,
+    paddingBottom: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: CARD_W * 0.85,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 16,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
-  moduleWrapper: {
-    marginHorizontal: 8,
+  cardIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 14,
   },
-  moduleItem: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    padding: 12,
-    borderRadius: 10,
+  cardTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    textAlign: "center",
+    marginBottom: 4,
   },
-  moduleIcon: { 
-    width: 36, 
-    height: 36, 
-    borderRadius: 10, 
-    justifyContent: 'center', 
-    alignItems: 'center',
+  cardSubtitle: {
+    fontSize: 11,
+    textAlign: "center",
+    lineHeight: 14,
   },
-  moduleContent: { 
-    flex: 1, 
-    marginLeft: 12,
+  cardBadge: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  moduleTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  // Expanded modules panel
+  expandedPanel: {
+    borderRadius: 18,
+    borderWidth: 1,
+    marginTop: 16,
+    overflow: "hidden",
+    padding: 4,
+  },
+  expandedHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     gap: 8,
   },
-  moduleTitle: { 
-    fontSize: 14, 
-    fontWeight: '600',
+  expandedDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
-  colorDot: {
+  expandedTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  moduleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    gap: 10,
+  },
+  moduleDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
   },
-  moduleSubtitle: { 
-    fontSize: 11, 
-    marginTop: 2,
+  moduleText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "500",
   },
-  // Sub Items
-  subItemsContainer: {
-    borderTopWidth: 1,
-    marginLeft: 48,
-    marginTop: 4,
-    marginBottom: 8,
+  moduleSep: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: 30,
   },
-  subItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+  // Sub items as chips
+  subChipsWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: 14,
+    paddingBottom: 10,
     gap: 8,
   },
-  subItemTitle: { 
-    flex: 1, 
-    fontSize: 13, 
-    fontWeight: '500',
+  subChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    gap: 6,
   },
-  // Footer
-  footerContainer: {
-    paddingVertical: 12,
-    paddingBottom: Platform.OS === 'ios' ? 28 : 16,
-    alignItems: 'center',
-    borderTopWidth: 1,
-  },
-  footer: {
-    fontSize: 11,
+  subChipText: {
+    fontSize: 12,
+    fontWeight: "500",
   },
 });

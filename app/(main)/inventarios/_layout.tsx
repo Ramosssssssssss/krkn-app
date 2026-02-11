@@ -142,6 +142,12 @@ export default function InventariosLayout() {
           title: "Inventarios Asignados",
         }}
       />
+      <Stack.Screen
+        name="mis-inventarios"
+        options={{
+          title: "Mis Inventarios",
+        }}
+      />
     </Stack>
   );
 }

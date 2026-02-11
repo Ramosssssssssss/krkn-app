@@ -2,7 +2,6 @@ import { useAuth } from "@/context/auth-context";
 import { useTheme, useThemeColors } from "@/context/theme-context";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { LinearGradient } from "expo-linear-gradient";
 import * as LocalAuthentication from "expo-local-authentication";
 import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -13,7 +12,6 @@ import {
     Animated,
     KeyboardAvoidingView,
     Platform,
-    ScrollView,
     StyleSheet,
     Text,
     TextInput,
@@ -31,7 +29,6 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [focusedField, setFocusedField] = useState<string | null>(null);
-  const [showDatabaseSelector, setShowDatabaseSelector] = useState(false);
 
   // Face ID states
   const [isFaceIdAvailable, setIsFaceIdAvailable] = useState(false);
@@ -40,14 +37,7 @@ export default function LoginScreen() {
     "faceid" | "touchid" | "none"
   >("none");
 
-  const {
-    companyCode,
-    company,
-    databases,
-    selectedDatabase,
-    selectDatabase,
-    login,
-  } = useAuth();
+  const { companyCode, company, selectedDatabase, login } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const colors = useThemeColors();
 
@@ -224,11 +214,6 @@ export default function LoginScreen() {
       return;
     }
 
-    if (!selectedDatabase) {
-      setError("Selecciona una base de datos");
-      return;
-    }
-
     setIsLoading(true);
     setError("");
 
@@ -267,463 +252,216 @@ export default function LoginScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar style={isDark ? "light" : "dark"} />
 
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={[
-            styles.headerBtn,
-            { backgroundColor: colors.inputBackground },
-          ]}
-          onPress={goBack}
-        >
-          <Ionicons
-            name="chevron-back"
-            size={20}
-            color={colors.textSecondary}
-          />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.headerBtn,
-            { backgroundColor: colors.inputBackground },
-          ]}
-          onPress={toggleTheme}
-        >
-          <Ionicons
-            name={isDark ? "sunny-outline" : "moon-outline"}
-            size={18}
-            color={colors.textSecondary}
-          />
-        </TouchableOpacity>
-      </View>
-
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.keyboardView}
+        style={styles.flex}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
       >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
+        {/* Top bar */}
+        <View style={styles.topBar}>
+          <TouchableOpacity
+            onPress={goBack}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
+            <Ionicons name="chevron-back" size={22} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={[styles.topBarTitle, { color: colors.textSecondary }]}>
+            {companyCode?.toUpperCase()}
+          </Text>
+          <TouchableOpacity
+            onPress={toggleTheme}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
+            <Ionicons
+              name={isDark ? "sunny-outline" : "moon-outline"}
+              size={18}
+              color={colors.textSecondary}
+            />
+          </TouchableOpacity>
+        </View>
+
+        {/* Center content */}
+        <Animated.View
+          style={[
+            styles.center,
+            { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+          ]}
         >
-          <Animated.View
+          {/* Brand */}
+          <Text style={[styles.brandLetter, { color: colors.accent }]}>
+            {companyCode?.charAt(0).toUpperCase() || "K"}
+          </Text>
+          <Text style={[styles.title, { color: colors.text }]}>Bienvenido</Text>
+          <Text style={[styles.subtitle, { color: colors.textTertiary }]}>
+            Ingresa para continuar
+          </Text>
+
+          {/* Inputs - iOS grouped style */}
+          <View
             style={[
-              styles.content,
-              { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+              styles.inputGroup,
+              { backgroundColor: colors.surface, borderColor: colors.border },
             ]}
           >
-            {/* Company Initial */}
-            <View
-              style={[styles.initialContainer, { borderColor: colors.border }]}
-            >
-              <Text style={[styles.initialText, { color: colors.accent }]}>
-                {companyCode?.charAt(0).toUpperCase() || "K"}
-              </Text>
-            </View>
-
-            <Text style={[styles.companyName, { color: colors.text }]}>
-              {companyCode?.toUpperCase() || "EMPRESA"}
-            </Text>
-            <Text
-              style={[styles.companyDomain, { color: colors.textTertiary }]}
-            >
-              {companyCode}.krkn.mx
-            </Text>
-
-            <View style={styles.dividerLine}>
-              <View style={[styles.line, { backgroundColor: colors.border }]} />
-            </View>
-
-            {/* Database Selector */}
-            {databases && databases.length > 0 && (
-              <TouchableOpacity
-                style={[
-                  styles.databaseSelector,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: selectedDatabase
-                      ? colors.accent
-                      : colors.border,
-                  },
-                ]}
-                onPress={() => setShowDatabaseSelector(true)}
-              >
-                <View style={styles.databaseInfo}>
-                  <Ionicons
-                    name="server-outline"
-                    size={20}
-                    color={
-                      selectedDatabase ? colors.accent : colors.textTertiary
-                    }
-                  />
-                  <View style={styles.databaseText}>
-                    <Text
-                      style={[
-                        styles.databaseLabel,
-                        { color: colors.textTertiary },
-                      ]}
-                    >
-                      Base de datos
-                    </Text>
-                    <Text style={[styles.databaseName, { color: colors.text }]}>
-                      {selectedDatabase
-                        ? selectedDatabase.nombre
-                        : "Selecciona una base de datos"}
-                    </Text>
-                  </View>
-                </View>
-                <Ionicons
-                  name="chevron-forward"
-                  size={20}
-                  color={colors.textTertiary}
-                />
-              </TouchableOpacity>
-            )}
-
-            <Text style={[styles.title, { color: colors.text }]}>
-              Bienvenido
-            </Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              Ingresa tus credenciales
-            </Text>
-
-            {/* Card */}
             <View
               style={[
-                styles.card,
-                { backgroundColor: colors.surface, borderColor: colors.border },
+                styles.inputRow,
+                focusedField === "username" && {
+                  backgroundColor: `${colors.accent}08`,
+                },
               ]}
             >
-              {/* Glow line */}
-              <LinearGradient
-                colors={["transparent", `${colors.accent}60`, "transparent"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.cardGlow}
+              <Ionicons
+                name="person-outline"
+                size={16}
+                color={colors.textTertiary}
+                style={styles.inputIcon}
               />
-
-              {/* Username */}
-              <View
-                style={[
-                  styles.inputBox,
-                  {
-                    backgroundColor: colors.inputBackground,
-                    borderColor:
-                      focusedField === "username"
-                        ? colors.accent
-                        : error && !username.trim()
-                          ? "#EF4444"
-                          : colors.border,
-                  },
-                ]}
-              >
-                <Ionicons
-                  name="mail-outline"
-                  size={18}
-                  color={colors.textTertiary}
-                />
-                <TextInput
-                  style={[styles.input, { color: colors.text }]}
-                  placeholder="Usuario"
-                  placeholderTextColor={colors.textTertiary}
-                  value={username}
-                  onChangeText={(text) => {
-                    setUsername(text.toUpperCase());
-                    setError("");
-                  }}
-                  autoCapitalize="characters"
-                  editable={!isLoading}
-                  onFocus={() => setFocusedField("username")}
-                  onBlur={() => setFocusedField(null)}
-                />
-              </View>
-
-              {/* Password */}
-              <View
-                style={[
-                  styles.inputBox,
-                  {
-                    backgroundColor: colors.inputBackground,
-                    borderColor:
-                      focusedField === "password"
-                        ? colors.accent
-                        : error && !password.trim()
-                          ? "#EF4444"
-                          : colors.border,
-                  },
-                ]}
-              >
-                <Ionicons
-                  name="lock-closed-outline"
-                  size={18}
-                  color={colors.textTertiary}
-                />
-                <TextInput
-                  style={[styles.input, { color: colors.text }]}
-                  placeholder="Contraseña"
-                  placeholderTextColor={colors.textTertiary}
-                  value={password}
-                  onChangeText={(text) => {
-                    setPassword(text.toUpperCase());
-                    setError("");
-                  }}
-                  autoCapitalize="characters"
-                  secureTextEntry={!showPassword}
-                  editable={!isLoading}
-                  onFocus={() => setFocusedField("password")}
-                  onBlur={() => setFocusedField(null)}
-                />
-                <TouchableOpacity
-                  onPress={() => setShowPassword(!showPassword)}
-                >
-                  <Ionicons
-                    name={showPassword ? "eye-off-outline" : "eye-outline"}
-                    size={18}
-                    color={colors.textTertiary}
-                  />
-                </TouchableOpacity>
-              </View>
-
-              {error ? (
-                <View style={styles.errorContainer}>
-                  <Ionicons name="alert-circle" size={14} color="#EF4444" />
-                  <Text style={styles.errorText}>{error}</Text>
-                </View>
-              ) : null}
-
-              <TouchableOpacity style={styles.forgotLink}>
-                <Text style={[styles.forgotText, { color: colors.accent }]}>
-                  ¿Olvidaste tu contraseña?
-                </Text>
-              </TouchableOpacity>
-
-              {/* Login Button */}
+              <TextInput
+                style={[styles.input, { color: colors.text }]}
+                placeholder="Usuario"
+                placeholderTextColor={colors.textTertiary}
+                value={username}
+                onChangeText={(t) => {
+                  setUsername(t.toUpperCase());
+                  setError("");
+                }}
+                autoCapitalize="characters"
+                editable={!isLoading}
+                onFocus={() => setFocusedField("username")}
+                onBlur={() => setFocusedField(null)}
+              />
+            </View>
+            <View
+              style={[styles.separator, { backgroundColor: colors.border }]}
+            />
+            <View
+              style={[
+                styles.inputRow,
+                focusedField === "password" && {
+                  backgroundColor: `${colors.accent}08`,
+                },
+              ]}
+            >
+              <Ionicons
+                name="lock-closed-outline"
+                size={16}
+                color={colors.textTertiary}
+                style={styles.inputIcon}
+              />
+              <TextInput
+                style={[styles.input, { color: colors.text }]}
+                placeholder="Contraseña"
+                placeholderTextColor={colors.textTertiary}
+                value={password}
+                onChangeText={(t) => {
+                  setPassword(t.toUpperCase());
+                  setError("");
+                }}
+                autoCapitalize="characters"
+                secureTextEntry={!showPassword}
+                editable={!isLoading}
+                onFocus={() => setFocusedField("password")}
+                onBlur={() => setFocusedField(null)}
+              />
               <TouchableOpacity
-                style={[
-                  styles.btn,
-                  (!username.trim() || !password.trim() || isLoading) &&
-                    styles.btnDisabled,
-                ]}
-                onPress={handleLogin}
-                disabled={!username.trim() || !password.trim() || isLoading}
-                activeOpacity={0.8}
+                onPress={() => setShowPassword(!showPassword)}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               >
-                <LinearGradient
-                  colors={
-                    !username.trim() || !password.trim() || isLoading
-                      ? [
-                          isDark ? "#1C1326" : "#E5E5E5",
-                          isDark ? "#1C1326" : "#E5E5E5",
-                        ]
-                      : [colors.accent, colors.accent]
-                  }
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.btnGradient}
-                >
-                  {isLoading ? (
-                    <ActivityIndicator color="#fff" size="small" />
-                  ) : (
-                    <>
-                      <Text
-                        style={[
-                          styles.btnText,
-                          {
-                            color:
-                              !username.trim() || !password.trim()
-                                ? colors.textTertiary
-                                : "#fff",
-                          },
-                        ]}
-                      >
-                        Entrar
-                      </Text>
-                      <Ionicons
-                        name="arrow-forward"
-                        size={18}
-                        color={
-                          !username.trim() || !password.trim()
-                            ? colors.textTertiary
-                            : "#fff"
-                        }
-                      />
-                    </>
-                  )}
-                </LinearGradient>
+                <Ionicons
+                  name={showPassword ? "eye-off-outline" : "eye-outline"}
+                  size={16}
+                  color={colors.textTertiary}
+                />
               </TouchableOpacity>
-
-              {/* Face ID Button */}
-              {isFaceIdAvailable && (
-                <>
-                  <View style={styles.dividerWithText}>
-                    <View
-                      style={[
-                        styles.dividerLineSmall,
-                        { backgroundColor: colors.border },
-                      ]}
-                    />
-                    <Text
-                      style={[
-                        styles.dividerText,
-                        { color: colors.textTertiary },
-                      ]}
-                    >
-                      o
-                    </Text>
-                    <View
-                      style={[
-                        styles.dividerLineSmall,
-                        { backgroundColor: colors.border },
-                      ]}
-                    />
-                  </View>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.faceIdBtn,
-                      {
-                        backgroundColor: hasSavedCredentials
-                          ? colors.inputBackground
-                          : `${colors.accent}10`,
-                        borderColor: hasSavedCredentials
-                          ? colors.border
-                          : colors.accent,
-                      },
-                    ]}
-                    onPress={
-                      hasSavedCredentials
-                        ? handleFaceIdLogin
-                        : () =>
-                            Alert.alert(
-                              biometricType === "faceid"
-                                ? "Face ID"
-                                : "Touch ID",
-                              "Inicia sesión una vez con tu usuario y contraseña para activar el acceso rápido.",
-                              [{ text: "Entendido" }],
-                            )
-                    }
-                    disabled={isLoading}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons
-                      name={
-                        biometricType === "faceid"
-                          ? "scan-outline"
-                          : "finger-print-outline"
-                      }
-                      size={24}
-                      color={colors.accent}
-                    />
-                    <Text style={[styles.faceIdText, { color: colors.text }]}>
-                      {biometricType === "faceid"
-                        ? "Usar Face ID"
-                        : "Usar Touch ID"}
-                    </Text>
-                    {!hasSavedCredentials && (
-                      <View
-                        style={[
-                          styles.faceIdBadge,
-                          { backgroundColor: colors.accent },
-                        ]}
-                      >
-                        <Text style={styles.faceIdBadgeText}>Nuevo</Text>
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                </>
-              )}
             </View>
-          </Animated.View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+          </View>
 
-      {/* Footer */}
-      <Text style={[styles.footer, { color: colors.textTertiary }]}>
-        © 2026 KRKN Systems
-      </Text>
+          {/* Error */}
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-      {/* Database Selector Modal */}
-      {showDatabaseSelector && (
-        <View style={styles.modalOverlay}>
+          {/* Button */}
           <TouchableOpacity
-            style={styles.modalBackdrop}
-            activeOpacity={1}
-            onPress={() => setShowDatabaseSelector(false)}
-          />
-          <View
-            style={[styles.modalContent, { backgroundColor: colors.surface }]}
+            style={[
+              styles.btn,
+              {
+                backgroundColor:
+                  !username.trim() || !password.trim() || isLoading
+                    ? isDark
+                      ? "#1a1a2e"
+                      : "#f0f0f5"
+                    : colors.accent,
+              },
+            ]}
+            onPress={handleLogin}
+            disabled={!username.trim() || !password.trim() || isLoading}
+            activeOpacity={0.8}
           >
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>
-                Selecciona una base de datos
-              </Text>
-              <TouchableOpacity onPress={() => setShowDatabaseSelector(false)}>
-                <Ionicons name="close" size={24} color={colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.databaseList}>
-              {databases.map((db) => (
-                <TouchableOpacity
-                  key={db.id}
+            {isLoading ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <View style={styles.btnInner}>
+                <Text
                   style={[
-                    styles.databaseItem,
+                    styles.btnText,
                     {
-                      backgroundColor:
-                        selectedDatabase?.id === db.id
-                          ? `${colors.accent}15`
-                          : colors.inputBackground,
-                      borderColor:
-                        selectedDatabase?.id === db.id
-                          ? colors.accent
-                          : colors.border,
+                      color:
+                        !username.trim() || !password.trim()
+                          ? colors.textTertiary
+                          : "#fff",
                     },
                   ]}
-                  onPress={() => {
-                    selectDatabase(db);
-                    setShowDatabaseSelector(false);
-                  }}
                 >
-                  <View style={styles.databaseItemContent}>
-                    <Ionicons
-                      name={
-                        selectedDatabase?.id === db.id
-                          ? "radio-button-on"
-                          : "radio-button-off"
-                      }
-                      size={22}
-                      color={
-                        selectedDatabase?.id === db.id
-                          ? colors.accent
-                          : colors.textTertiary
-                      }
-                    />
-                    <View style={styles.databaseItemText}>
-                      <Text style={[styles.dbName, { color: colors.text }]}>
-                        {db.nombre}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.dbServer,
-                          { color: colors.textTertiary },
-                        ]}
-                      >
-                        {db.ip_servidor}:{db.puerto_bd}
-                      </Text>
-                    </View>
-                  </View>
-                  {selectedDatabase?.id === db.id && (
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={20}
-                      color={colors.accent}
-                    />
-                  )}
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-      )}
+                  Continuar
+                </Text>
+                <Ionicons
+                  name="arrow-forward"
+                  size={16}
+                  color={
+                    !username.trim() || !password.trim()
+                      ? colors.textTertiary
+                      : "#fff"
+                  }
+                />
+              </View>
+            )}
+          </TouchableOpacity>
+
+          {/* Face ID */}
+          {isFaceIdAvailable && (
+            <TouchableOpacity
+              style={styles.biometricBtn}
+              onPress={
+                hasSavedCredentials
+                  ? handleFaceIdLogin
+                  : () =>
+                      Alert.alert(
+                        biometricType === "faceid" ? "Face ID" : "Touch ID",
+                        "Inicia sesión una vez para activar el acceso rápido.",
+                        [{ text: "OK" }],
+                      )
+              }
+              disabled={isLoading}
+              activeOpacity={0.6}
+            >
+              <Ionicons
+                name={
+                  biometricType === "faceid"
+                    ? "scan-outline"
+                    : "finger-print-outline"
+                }
+                size={28}
+                color={colors.accent}
+              />
+            </TouchableOpacity>
+          )}
+        </Animated.View>
+
+        {/* Footer */}
+        <Text style={[styles.footer, { color: colors.textTertiary }]}>
+          KRKN · v1.0
+        </Text>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -732,276 +470,109 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingTop: Platform.OS === "ios" ? 56 : 40,
-    paddingHorizontal: 20,
-  },
-  headerBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  keyboardView: {
+  flex: {
     flex: 1,
   },
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 80,
-  },
-  content: {
-    alignItems: "center",
-  },
-  // Company Initial
-  initialContainer: {
-    width: 72,
-    height: 72,
-    borderRadius: 20,
-    borderWidth: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  initialText: {
-    fontSize: 28,
-    fontWeight: "700",
-  },
-  companyName: {
-    fontSize: 18,
-    fontWeight: "700",
-    letterSpacing: 3,
-    marginBottom: 4,
-  },
-  companyDomain: {
-    fontSize: 12,
-    marginBottom: 20,
-  },
-  dividerLine: {
-    width: 40,
-    marginBottom: 20,
-  },
-  line: {
-    height: 2,
-    borderRadius: 1,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 13,
-    marginBottom: 20,
-  },
-  // Card
-  card: {
-    width: "100%",
-    maxWidth: 360,
-    borderRadius: 16,
-    padding: 24,
-    borderWidth: 1,
-    overflow: "hidden",
-  },
-  cardGlow: {
-    position: "absolute",
-    top: 0,
-    left: 20,
-    right: 20,
-    height: 1,
-  },
-  // Input
-  inputBox: {
+  // Top bar
+  topBar: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    height: 48,
-    marginBottom: 12,
-    gap: 10,
+    justifyContent: "space-between",
+    paddingTop: Platform.OS === "ios" ? 58 : 44,
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+  },
+  topBarTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    letterSpacing: 1.5,
+  },
+  // Center
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 32,
+  },
+  brandLetter: {
+    fontSize: 52,
+    fontWeight: "800",
+    letterSpacing: -2,
+    marginBottom: 2,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: "700",
+    marginBottom: 4,
+    letterSpacing: -0.3,
+  },
+  subtitle: {
+    fontSize: 14,
+    marginBottom: 28,
+  },
+  // Inputs - iOS grouped
+  inputGroup: {
+    width: "100%",
+    maxWidth: 340,
+    borderRadius: 12,
     borderWidth: 1,
+    overflow: "hidden",
+    marginBottom: 12,
+  },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    height: 48,
+    paddingHorizontal: 14,
+  },
+  inputIcon: {
+    width: 22,
+  },
+  separator: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: 50,
   },
   input: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 16,
   },
-  errorContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 8,
-  },
+  // Error
   errorText: {
     color: "#EF4444",
     fontSize: 13,
-  },
-  forgotLink: {
-    alignSelf: "flex-end",
-    marginBottom: 16,
-  },
-  forgotText: {
-    fontSize: 13,
+    marginBottom: 4,
     fontWeight: "500",
   },
   // Button
   btn: {
-    borderRadius: 10,
-    overflow: "hidden",
+    width: "100%",
+    maxWidth: 340,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 8,
   },
-  btnDisabled: {
-    opacity: 0.7,
-  },
-  btnGradient: {
+  btnInner: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 13,
-    gap: 6,
+    gap: 8,
   },
   btnText: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "600",
+    letterSpacing: 0.3,
+  },
+  // Biometric
+  biometricBtn: {
+    marginTop: 20,
+    padding: 10,
   },
   // Footer
   footer: {
     textAlign: "center",
-    fontSize: 12,
-    paddingBottom: Platform.OS === "ios" ? 40 : 24,
-  },
-  // Database Selector
-  databaseSelector: {
-    width: "100%",
-    maxWidth: 360,
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 20,
-  },
-  databaseInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    flex: 1,
-  },
-  databaseText: {
-    flex: 1,
-  },
-  databaseLabel: {
     fontSize: 11,
-    marginBottom: 2,
-    textTransform: "uppercase",
+    paddingBottom: Platform.OS === "ios" ? 36 : 20,
     letterSpacing: 0.5,
-  },
-  databaseName: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  // Modal
-  modalOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: "flex-end",
-  },
-  modalBackdrop: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.5)",
-  },
-  modalContent: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    maxHeight: "70%",
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  databaseList: {
-    maxHeight: 400,
-  },
-  databaseItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-  },
-  databaseItemContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    flex: 1,
-  },
-  databaseItemText: {
-    flex: 1,
-  },
-  dbName: {
-    fontSize: 15,
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  dbServer: {
-    fontSize: 12,
-  },
-  // Face ID Button
-  dividerWithText: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: 16,
-    gap: 12,
-  },
-  dividerLineSmall: {
-    flex: 1,
-    height: 1,
-  },
-  dividerText: {
-    fontSize: 13,
-    fontWeight: "500",
-  },
-  faceIdBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 14,
-    borderRadius: 10,
-    borderWidth: 1,
-    gap: 10,
-  },
-  faceIdText: {
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  faceIdBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  faceIdBadgeText: {
-    color: "#fff",
-    fontSize: 10,
-    fontWeight: "700",
   },
 });

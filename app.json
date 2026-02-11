@@ -47,7 +47,8 @@
         {
           "icon": "./assets/images/ggplay.png",
           "color": "#3B82F6",
-          "defaultChannel": "inventarios"
+          "defaultChannel": "inventarios",
+          "sounds": ["./assets/sounds/Aviso.wav"]
         }
       ],
       [

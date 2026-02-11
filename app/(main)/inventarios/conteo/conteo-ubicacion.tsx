@@ -15,8 +15,8 @@ import { ArticuloDetalle } from "@/types/inventarios";
 import { Ionicons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
-import { router, Stack } from "expo-router";
-import React, { useState } from "react";
+import { router, Stack, useLocalSearchParams } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -42,6 +42,10 @@ export default function ConteoUbicacionScreen() {
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const params = useLocalSearchParams<{
+    sucursalId?: string;
+    almacenId?: string;
+  }>();
   const [showLocationModal, setShowLocationModal] = useState(true);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -105,6 +109,27 @@ export default function ConteoUbicacionScreen() {
   const almacenNombre =
     almacenesFiltrados.find((a: any) => a.id === selectedAlmacen)?.nombre || "";
 
+  // Auto-seleccionar sucursal/almacen si vienen de push notification
+  useEffect(() => {
+    if (
+      params.sucursalId &&
+      params.almacenId &&
+      sucursales.length > 0 &&
+      !selectedSucursal
+    ) {
+      const sId = Number(params.sucursalId);
+      const aId = Number(params.almacenId);
+      if (sucursales.some((s: any) => s.id === sId)) {
+        setSelectedSucursal(sId);
+        setTimeout(() => {
+          setSelectedAlmacen(aId);
+          setShowLocationModal(false);
+          setTimeout(() => setShowUbicacionModal(true), 400);
+        }, 100);
+      }
+    }
+  }, [params.sucursalId, params.almacenId, sucursales]);
+
   // Manejar la confirmación manual de ubicación
   const handleConfirmLocation = () => {
     if (selectedSucursal && selectedAlmacen) {
@@ -115,8 +140,11 @@ export default function ConteoUbicacionScreen() {
 
   const handleBuscarUbicacion = async () => {
     // Asegurar transformación final antes de procesar
-    const ubicacionLimpia = ubicacionBusqueda.trim().replace(/\//g, "-").toUpperCase();
-    
+    const ubicacionLimpia = ubicacionBusqueda
+      .trim()
+      .replace(/\//g, "-")
+      .toUpperCase();
+
     if (!ubicacionLimpia || !selectedAlmacen) {
       Alert.alert("Error", "Ingresa una ubicación válida");
       return;

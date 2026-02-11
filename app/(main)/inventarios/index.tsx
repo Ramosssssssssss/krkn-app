@@ -262,6 +262,14 @@ export default function InventariosIndexScreen() {
 
   const ciclicoOptions: ModalOption[] = [
     {
+      id: "mis-inventarios",
+      title: "Mis Inventarios",
+      subtitle: "Conteos asignados a ti",
+      icon: "person-outline" as const,
+      color: "#3B82F6",
+      route: "/(main)/inventarios/mis-inventarios",
+    },
+    {
       id: "conteo-total-main",
       title: "Cíclico",
       subtitle: t("inventory.totalCountSubtitle"),

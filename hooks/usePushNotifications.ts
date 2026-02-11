@@ -10,6 +10,7 @@ import { useAuth } from "@/context/auth-context";
 import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
+import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 
@@ -31,10 +32,14 @@ async function setupAndroidChannel() {
   if (Platform.OS === "android") {
     await Notifications.setNotificationChannelAsync("inventarios", {
       name: "Inventarios",
-      importance: Notifications.AndroidImportance.HIGH,
-      vibrationPattern: [0, 250, 250, 250],
+      description: "Notificaciones de inventarios asignados y operaciones",
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 200, 100, 200],
       lightColor: "#3B82F6",
-      sound: "default",
+      sound: "Aviso.wav",
+      enableLights: true,
+      enableVibrate: true,
+      showBadge: true,
     });
 
     await Notifications.setNotificationChannelAsync("default", {
@@ -85,6 +90,35 @@ async function registerForPushNotificationsAsync(): Promise<string | null> {
   }
 }
 
+// ── Navegar segun la data de la notificacion ──
+function handleNotificationNavigation(data: Record<string, any>) {
+  console.log(
+    "[PUSH] handleNotificationNavigation llamada, data:",
+    JSON.stringify(data),
+  );
+
+  if (data?.type === "inventario_asignado") {
+    setTimeout(() => {
+      // Params de ubicacion para pre-seleccionar
+      const params: Record<string, string> = {};
+      if (data.sucursalId) params.sucursalId = String(data.sucursalId);
+      if (data.almacenId) params.almacenId = String(data.almacenId);
+
+      if (data.esHoy === true || data.esHoy === "true") {
+        const ruta =
+          data.tipoConteo === "ubicacion"
+            ? "/(main)/inventarios/conteo/conteo-ubicacion"
+            : "/(main)/inventarios/conteo/crear-conteo";
+        console.log("[PUSH] Navegando a:", ruta, "params:", params);
+        router.push({ pathname: ruta as any, params });
+      } else {
+        console.log("[PUSH] Navegando a mis-inventarios");
+        router.push("/(main)/inventarios/mis-inventarios" as any);
+      }
+    }, 800);
+  }
+}
+
 // ── Hook principal ──
 export function usePushNotifications() {
   const { user, companyCode, isAuthenticated } = useAuth();
@@ -95,7 +129,48 @@ export function usePushNotifications() {
     null,
   );
   const responseListener = useRef<Notifications.EventSubscription | null>(null);
+  const lastResponseId = useRef<string | null>(null);
 
+  // ── SIEMPRE: Listeners de notificacion (independiente del auth) ──
+  useEffect(() => {
+    // Foreground: notificacion recibida
+    notificationListener.current =
+      Notifications.addNotificationReceivedListener((notif) => {
+        setNotification(notif);
+        console.log("[PUSH] Notificacion recibida en foreground");
+      });
+
+    // Tap: usuario toco la notificacion
+    responseListener.current =
+      Notifications.addNotificationResponseReceivedListener((response) => {
+        const id = response.notification.request.identifier;
+        console.log("[PUSH] Tap detectado, id:", id);
+        if (lastResponseId.current === id) return;
+        lastResponseId.current = id;
+
+        const data = response.notification.request.content.data;
+        handleNotificationNavigation(data);
+      });
+
+    // Cold start: app abierta por notificacion
+    Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (!response) return;
+      const id = response.notification.request.identifier;
+      console.log("[PUSH] Cold start response, id:", id);
+      if (lastResponseId.current === id) return;
+      lastResponseId.current = id;
+
+      const data = response.notification.request.content.data;
+      handleNotificationNavigation(data);
+    });
+
+    return () => {
+      notificationListener.current?.remove();
+      responseListener.current?.remove();
+    };
+  }, []);
+
+  // ── Registro de token (requiere auth) ──
   useEffect(() => {
     if (!isAuthenticated || !user?.USUARIO_ID || !companyCode) return;
 
@@ -119,37 +194,14 @@ export function usePushNotifications() {
             pushToken: token,
           }),
         });
-        console.log(
-          "✅ Push token registrado:",
-          token.substring(0, 30) + "...",
-        );
+        console.log("Push token registrado:", token.substring(0, 30) + "...");
       } catch (e) {
         console.error("Error registrando push token:", e);
       }
     })();
 
-    // Listener: notificación recibida en foreground
-    notificationListener.current =
-      Notifications.addNotificationReceivedListener((notif) => {
-        if (mounted) setNotification(notif);
-      });
-
-    // Listener: usuario tocó la notificación
-    responseListener.current =
-      Notifications.addNotificationResponseReceivedListener((response) => {
-        const data = response.notification.request.content.data;
-        console.log("📱 Notificación tocada, data:", data);
-
-        // Aquí se puede navegar según el tipo
-        if (data?.type === "inventario_asignado") {
-          // La navegación se maneja desde el layout que use este hook
-        }
-      });
-
     return () => {
       mounted = false;
-      notificationListener.current?.remove();
-      responseListener.current?.remove();
     };
   }, [isAuthenticated, user?.USUARIO_ID, companyCode]);
 

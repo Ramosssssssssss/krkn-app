@@ -8,15 +8,15 @@ import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Animated,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Animated,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 export default function HomeScreen() {
@@ -164,6 +164,58 @@ export default function HomeScreen() {
             </View>
           </View>
 
+          {/* Database Chip */}
+          <TouchableOpacity
+            style={[
+              styles.dbChip,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+            onPress={() => setShowDbModal(true)}
+            activeOpacity={0.7}
+            disabled={loadingDatabases || databases.length === 0}
+          >
+            <View
+              style={[
+                styles.dbChipIcon,
+                { backgroundColor: colors.accentLight },
+              ]}
+            >
+              <Ionicons name="server-outline" size={14} color={colors.accent} />
+            </View>
+            {loadingDatabases ? (
+              <ActivityIndicator
+                size="small"
+                color={colors.accent}
+                style={{ marginLeft: 8 }}
+              />
+            ) : selectedDb ? (
+              <>
+                <Text
+                  style={[styles.dbChipName, { color: colors.text }]}
+                  numberOfLines={1}
+                >
+                  {selectedDb.nombre}
+                </Text>
+                <View
+                  style={[
+                    styles.dbChipDot,
+                    { backgroundColor: colors.success },
+                  ]}
+                />
+              </>
+            ) : (
+              <Text style={[styles.dbChipName, { color: colors.textTertiary }]}>
+                Sin base de datos
+              </Text>
+            )}
+            <Ionicons
+              name="chevron-down"
+              size={14}
+              color={colors.textTertiary}
+              style={{ marginLeft: 4 }}
+            />
+          </TouchableOpacity>
+
           {/* Quick Stats */}
           <View
             style={[
@@ -276,109 +328,6 @@ export default function HomeScreen() {
               colors={colors}
             />
           </View>
-
-          {/* Database - At bottom */}
-          <Text style={[styles.sectionLabel, { color: colors.textTertiary }]}>
-            {t("home.configuration")}
-          </Text>
-          <View
-            style={[
-              styles.card,
-              { backgroundColor: colors.surface, borderColor: colors.border },
-            ]}
-          >
-            {loadingDatabases ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="small" color={colors.accent} />
-                <Text
-                  style={[styles.loadingText, { color: colors.textTertiary }]}
-                >
-                  Cargando bases de datos...
-                </Text>
-              </View>
-            ) : selectedDb ? (
-              <>
-                <View style={styles.dbRow}>
-                  <View
-                    style={[
-                      styles.dbIcon,
-                      { backgroundColor: colors.accentLight },
-                    ]}
-                  >
-                    <Ionicons
-                      name="server-outline"
-                      size={18}
-                      color={colors.accent}
-                    />
-                  </View>
-                  <View style={styles.dbInfo}>
-                    <Text style={[styles.dbName, { color: colors.text }]}>
-                      {selectedDb.nombre}
-                    </Text>
-                    <Text
-                      style={[styles.dbServer, { color: colors.textTertiary }]}
-                    >
-                      {selectedDb.ip_servidor}:{selectedDb.puerto_bd}
-                    </Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      { backgroundColor: `${colors.success}15` },
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.statusDot,
-                        { backgroundColor: colors.success },
-                      ]}
-                    />
-                    <Text
-                      style={[styles.statusText, { color: colors.success }]}
-                    >
-                      Online
-                    </Text>
-                  </View>
-                </View>
-                <View
-                  style={[
-                    styles.rowDivider,
-                    { backgroundColor: colors.border },
-                  ]}
-                />
-                <TouchableOpacity
-                  style={styles.changeBtn}
-                  onPress={() => setShowDbModal(true)}
-                  activeOpacity={0.6}
-                  disabled={databases.length === 0}
-                >
-                  <Ionicons
-                    name="swap-horizontal-outline"
-                    size={16}
-                    color={colors.accent}
-                  />
-                  <Text
-                    style={[styles.changeBtnText, { color: colors.accent }]}
-                  >
-                    {t("home.changeDatabase")}
-                  </Text>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <View style={styles.loadingContainer}>
-                <Ionicons
-                  name="alert-circle-outline"
-                  size={24}
-                  color={colors.textTertiary}
-                />
-                <Text
-                  style={[styles.loadingText, { color: colors.textTertiary }]}
-                >
-                  No hay bases de datos disponibles
-                </Text>
-              </View>
-            )}
-          </View>
         </Animated.View>
       </ScrollView>
 
@@ -436,74 +385,84 @@ export default function HomeScreen() {
                   </Text>
                 </View>
               ) : (
-                databases.map((db) => (
-                  <TouchableOpacity
-                    key={db.id}
-                    style={[
-                      styles.dbOption,
-                      {
-                        borderColor:
-                          selectedDb?.id === db.id
-                            ? colors.accent
-                            : colors.border,
-                      },
-                    ]}
-                    onPress={() => {
-                      setSelectedDb(db);
-                      selectDatabase(db); // Guardar en contexto
-                      setCurrentDatabaseId(db.id); // Establecer para las peticiones
-                      setShowDbModal(false);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <View
+                <ScrollView
+                  style={styles.modalScroll}
+                  showsVerticalScrollIndicator={false}
+                  bounces={false}
+                >
+                  {databases.map((db) => (
+                    <TouchableOpacity
+                      key={db.id}
                       style={[
-                        styles.dbOptionIcon,
-                        { backgroundColor: colors.accentLight },
+                        styles.dbOption,
+                        {
+                          borderColor:
+                            selectedDb?.id === db.id
+                              ? colors.accent
+                              : colors.border,
+                          backgroundColor:
+                            selectedDb?.id === db.id
+                              ? `${colors.accent}08`
+                              : "transparent",
+                        },
                       ]}
+                      onPress={() => {
+                        setSelectedDb(db);
+                        selectDatabase(db);
+                        setCurrentDatabaseId(db.id);
+                        setShowDbModal(false);
+                      }}
+                      activeOpacity={0.7}
                     >
-                      <Ionicons
-                        name="server-outline"
-                        size={16}
-                        color={
-                          selectedDb?.id === db.id
-                            ? colors.accent
-                            : colors.textTertiary
-                        }
-                      />
-                    </View>
-                    <View style={styles.dbOptionInfo}>
-                      <Text
+                      <View
                         style={[
-                          styles.dbOptionName,
-                          {
-                            color:
-                              selectedDb?.id === db.id
-                                ? colors.accent
-                                : colors.text,
-                          },
+                          styles.dbOptionIcon,
+                          { backgroundColor: colors.accentLight },
                         ]}
                       >
-                        {db.nombre}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.dbOptionServer,
-                          { color: colors.textTertiary },
-                        ]}
-                      >
-                        {db.ip_servidor}:{db.puerto_bd}
-                      </Text>
-                    </View>
-                    {selectedDb?.id === db.id && (
-                      <Ionicons
-                        name="checkmark-circle"
-                        size={18}
-                        color={colors.accent}
-                      />
-                    )}
-                  </TouchableOpacity>
-                ))
+                        <Ionicons
+                          name="server-outline"
+                          size={16}
+                          color={
+                            selectedDb?.id === db.id
+                              ? colors.accent
+                              : colors.textTertiary
+                          }
+                        />
+                      </View>
+                      <View style={styles.dbOptionInfo}>
+                        <Text
+                          style={[
+                            styles.dbOptionName,
+                            {
+                              color:
+                                selectedDb?.id === db.id
+                                  ? colors.accent
+                                  : colors.text,
+                            },
+                          ]}
+                        >
+                          {db.nombre}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.dbOptionServer,
+                            { color: colors.textTertiary },
+                          ]}
+                        >
+                          {db.ip_servidor}:{db.puerto_bd}
+                        </Text>
+                      </View>
+                      {selectedDb?.id === db.id && (
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={18}
+                          color={colors.accent}
+                        />
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
               )}
             </View>
           </BlurView>
@@ -713,58 +672,34 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "500",
   },
-  // Database
-  dbRow: {
+  // Database Chip
+  dbChip: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 20,
   },
-  dbIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+  dbChipIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
   },
-  dbInfo: {
+  dbChipName: {
     flex: 1,
-    marginLeft: 12,
-  },
-  dbName: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  dbServer: {
-    fontSize: 11,
-    marginTop: 2,
-  },
-  statusBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-    gap: 5,
-  },
-  statusDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-  },
-  statusText: {
-    fontSize: 10,
-    fontWeight: "600",
-  },
-  changeBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    gap: 6,
-  },
-  changeBtnText: {
     fontSize: 13,
-    fontWeight: "500",
+    fontWeight: "600",
+    marginLeft: 10,
+  },
+  dbChipDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 2,
   },
   loadingContainer: {
     flexDirection: "row",
@@ -805,6 +740,10 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 18,
     borderWidth: 1,
+    maxHeight: 420,
+  },
+  modalScroll: {
+    maxHeight: 320,
   },
   modalHeader: {
     flexDirection: "row",

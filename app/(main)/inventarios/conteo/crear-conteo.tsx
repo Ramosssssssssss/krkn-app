@@ -1,4 +1,14 @@
 import ArticleCard from "@/components/inventarios/ArticleCard";
+import {
+  BottomActions,
+  ConteoEmptyState,
+  LocationChip,
+  LocationPickerModal,
+  LocationScannerModal,
+  OptionsActionSheet,
+  SummaryModal,
+  UbicacionModal,
+} from "@/components/inventarios/conteo-ciclico";
 import ProductDetailModal from "@/components/inventarios/ProductDetailModal";
 import ProductSearchBar from "@/components/inventarios/ProductSearchBar";
 import ScanHeader from "@/components/inventarios/ScanHeader";
@@ -10,33 +20,29 @@ import { useArticleScanner } from "@/hooks/use-article-scanner";
 import { useSucursalesAlmacenes } from "@/hooks/use-sucursales-almacenes";
 import { crearInventarioFisico } from "@/services/inventarios";
 import { Ionicons } from "@expo/vector-icons";
-import { CameraView, useCameraPermissions } from "expo-camera";
+import { useCameraPermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
-import { router, Stack } from "expo-router";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    FlatList,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-const { width } = Dimensions.get("window");
 
 export default function CrearConteoScreen() {
   const colors = useThemeColors();
-  const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const params = useLocalSearchParams<{
+    sucursalId?: string;
+    almacenId?: string;
+  }>();
   const [showLocationModal, setShowLocationModal] = useState(true);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -95,6 +101,25 @@ export default function CrearConteoScreen() {
     sucursales.find((s: any) => s.id === selectedSucursal)?.nombre || "";
   const almacenNombre =
     almacenesFiltrados.find((a: any) => a.id === selectedAlmacen)?.nombre || "";
+
+  // Auto-seleccionar sucursal/almacen si vienen de push notification
+  useEffect(() => {
+    if (
+      params.sucursalId &&
+      params.almacenId &&
+      sucursales.length > 0 &&
+      !selectedSucursal
+    ) {
+      const sId = Number(params.sucursalId);
+      const aId = Number(params.almacenId);
+      if (sucursales.some((s: any) => s.id === sId)) {
+        setSelectedSucursal(sId);
+        // Dar tiempo al filtro de almacenes antes de seleccionar almacen
+        setTimeout(() => setSelectedAlmacen(aId), 100);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.sucursalId, params.almacenId, sucursales]);
 
   useEffect(() => {
     if (selectedSucursal && selectedAlmacen) {
