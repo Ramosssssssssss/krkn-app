@@ -4,6 +4,7 @@ import QuickLocationModal from "@/components/catalogos/QuickLocationModal";
 import QuickStockModal from "@/components/catalogos/QuickStockModal";
 import ScannerModal from "@/components/catalogos/ScannerModal";
 import StockAdjustmentModal from "@/components/catalogos/StockAdjustmentModal";
+import { SkeletonArticleCatalogList } from "@/components/Skeleton";
 import { API_CONFIG } from "@/config/api";
 import { useAssistive } from "@/context/assistive-context";
 import { useTheme, useThemeColors } from "@/context/theme-context";
@@ -13,27 +14,27 @@ import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import { Stack, useRouter } from "expo-router";
 import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
 } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  FlatList,
-  Image,
-  Keyboard,
-  Modal,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    FlatList,
+    Image,
+    Keyboard,
+    Modal,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { Swipeable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -263,12 +264,17 @@ export default function ArticulosScreen() {
       }
     } catch (error: any) {
       console.error("Error fetching articles:", error);
-      setApiError(error?.message || "Error de red");
+      if (thisRequestId === requestIdRef.current) {
+        setApiError(error?.message || "Error de red");
+      }
     } finally {
-      setIsLoading(false);
-      isFetchingRef.current = false;
-      setIsInitialLoading(false);
-      setRefreshing(false);
+      // Solo limpiar estados de carga si esta es la solicitud más reciente
+      if (thisRequestId === requestIdRef.current) {
+        setIsLoading(false);
+        isFetchingRef.current = false;
+        setIsInitialLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
@@ -287,8 +293,9 @@ export default function ArticulosScreen() {
     setLastSearch(finalSearch);
     setHasMore(true);
 
-    // Mostrar feedback visual de carga
-    setRefreshing(true);
+    // Limpiar artículos y mostrar skeleton
+    setArticulos([]);
+    setIsInitialLoading(true);
     setHasFetched(true);
 
     // Ejecutar búsqueda directamente
@@ -298,14 +305,9 @@ export default function ArticulosScreen() {
 
   // Función para manejar click en filtro del dashboard
   const handleFilterClick = (filter: FilterType) => {
-    setActiveFilter(filter);
-    setArticulos([]);
-    setPage(1);
-    pageRef.current = 1;
-    setHasMore(true);
     setHasFetched(true);
-    setIsInitialLoading(true);
-    fetchArticulos(1, lastSearch, true, filter);
+    setActiveFilter(filter);
+    // useEffect[activeFilter] se encarga del fetch y limpieza
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
 
@@ -317,6 +319,7 @@ export default function ArticulosScreen() {
     setPage(1);
     pageRef.current = 1;
     setHasMore(true);
+    setIsInitialLoading(true);
     fetchArticulos(1, lastSearch, true, activeFilter);
   }, [activeFilter]);
 
@@ -471,6 +474,7 @@ export default function ArticulosScreen() {
       setPage(1);
       pageRef.current = 1;
       setHasMore(true);
+      setIsInitialLoading(true);
       fetchArticulos(1, lastSearch, true, activeFilter);
     }
   }, [selectedSucursal]);
@@ -1306,14 +1310,7 @@ export default function ArticulosScreen() {
           )}
 
           {isInitialLoading ? (
-            <View style={styles.centerContainer}>
-              <ActivityIndicator size="large" color={colors.accent} />
-              <Text
-                style={[styles.loadingText, { color: colors.textTertiary }]}
-              >
-                Cargando catálogo...
-              </Text>
-            </View>
+            <SkeletonArticleCatalogList count={8} />
           ) : (
             <>
               {/* Products List/Grid */}

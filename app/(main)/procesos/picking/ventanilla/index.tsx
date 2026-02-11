@@ -1,3 +1,4 @@
+import { SkeletonCardList } from "@/components/Skeleton";
 import { API_URL } from "@/config/api";
 import { useAuth } from "@/context/auth-context";
 import { useTheme, useThemeColors } from "@/context/theme-context";
@@ -8,7 +9,6 @@ import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
     Animated,
     Modal,
     RefreshControl,
@@ -315,7 +315,9 @@ export default function VentanillaScreen() {
           </View>
         }
         ListEmptyComponent={
-          !loading ? (
+          loading ? (
+            <SkeletonCardList count={4} />
+          ) : (
             <View style={styles.emptyContainer}>
               <View
                 style={[
@@ -340,7 +342,7 @@ export default function VentanillaScreen() {
                 No hay ventanillas pendientes por surtir
               </Text>
             </View>
-          ) : null
+          )
         }
         refreshControl={
           <RefreshControl
@@ -350,12 +352,6 @@ export default function VentanillaScreen() {
           />
         }
       />
-
-      {loading && !refreshing && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="small" color={colors.accent} />
-        </View>
-      )}
 
       {/* iOS Alert */}
       <Modal visible={alert.visible} transparent animationType="fade">

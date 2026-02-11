@@ -31,8 +31,20 @@ export default function ConteoEmptyState({ aggressiveScan }: Props) {
 }
 
 const st = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", alignItems: "center", padding: 32 },
-  icon: { width: 72, height: 72, borderRadius: 20, justifyContent: "center", alignItems: "center", marginBottom: 16 },
+  container: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 32,
+  },
+  icon: {
+    width: 72,
+    height: 72,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
   title: { fontSize: 15, fontWeight: "600", marginBottom: 6 },
   subtitle: { fontSize: 12, textAlign: "center", lineHeight: 18 },
 });

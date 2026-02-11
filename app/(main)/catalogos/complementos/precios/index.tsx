@@ -1,3 +1,4 @@
+import { Bone } from "@/components/Skeleton";
 import { API_CONFIG } from "@/config/api";
 import { useAuth } from "@/context/auth-context";
 import { useThemeColors } from "@/context/theme-context";
@@ -6,14 +7,14 @@ import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    FlatList,
-    RefreshControl,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Dimensions,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -23,27 +24,20 @@ interface PrecioEmpresa {
   nombre: string;
 }
 
-// Color palette for price list icons
-const ICON_COLORS = [
-  "#0D9488", // teal
-  "#3B82F6", // blue
-  "#EF4444", // red
-  "#F59E0B", // amber
-  "#8B5CF6", // purple
-  "#EC4899", // pink
-  "#10B981", // emerald
-  "#06B6D4", // cyan
-];
+const { width } = Dimensions.get("window");
+const GRID_GAP = 12;
+const CARD_SIZE = (width - 32 - GRID_GAP) / 2;
 
-const PRICE_ICONS: (keyof typeof Ionicons.glyphMap)[] = [
-  "pricetag",
-  "pricetag-outline",
-  "cash-outline",
-  "card-outline",
-  "wallet-outline",
-  "trending-up-outline",
-  "stats-chart-outline",
-  "receipt-outline",
+// Card configs — each price list card gets a unique look
+const CARD_THEMES = [
+  { bg: "#0D9488", icon: "pricetag" as const, label: "Lista" },
+  { bg: "#3B82F6", icon: "cash-outline" as const, label: "Lista" },
+  { bg: "#8B5CF6", icon: "wallet-outline" as const, label: "Lista" },
+  { bg: "#EF4444", icon: "trending-up-outline" as const, label: "Lista" },
+  { bg: "#F59E0B", icon: "card-outline" as const, label: "Lista" },
+  { bg: "#EC4899", icon: "stats-chart-outline" as const, label: "Lista" },
+  { bg: "#10B981", icon: "receipt-outline" as const, label: "Lista" },
+  { bg: "#06B6D4", icon: "pricetag-outline" as const, label: "Lista" },
 ];
 
 export default function PreciosScreen() {
@@ -58,26 +52,24 @@ export default function PreciosScreen() {
   const [precios, setPrecios] = useState<PrecioEmpresa[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     loadPrecios();
   }, [selectedDatabase]);
 
   const loadPrecios = async () => {
     if (!selectedDatabase) return;
-
     setLoading(true);
     try {
       const url = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.PRECIOS_EMPRESA}?empresa_id=${selectedDatabase.id}`;
       const response = await fetch(url);
       const data = await response.json();
-
       if (data.success && data.data?.precios) {
         setPrecios(data.data.precios);
       } else {
         setPrecios([]);
       }
-    } catch (error) {
-      console.error("Error loading precios:", error);
+    } catch {
       setPrecios([]);
     } finally {
       setLoading(false);
@@ -93,6 +85,7 @@ export default function PreciosScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     await loadPrecios();
     setRefreshing(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDatabase]);
 
   const handleNewList = () => {
@@ -100,96 +93,90 @@ export default function PreciosScreen() {
     setShowCreateModal(true);
   };
 
-  const getIconColor = (index: number) => {
-    return ICON_COLORS[index % ICON_COLORS.length];
-  };
+  const getTheme = (index: number) => CARD_THEMES[index % CARD_THEMES.length];
 
-  const getIcon = (index: number): keyof typeof Ionicons.glyphMap => {
-    return PRICE_ICONS[index % PRICE_ICONS.length];
-  };
-
-  const renderItem = ({
-    item,
-    index,
-  }: {
-    item: PrecioEmpresa;
-    index: number;
-  }) => {
-    const isFirst = index === 0;
-    const isLast = index === filteredPrecios.length - 1;
-
-    return (
-      <TouchableOpacity
-        style={[
-          styles.listItem,
-          { backgroundColor: colors.surface },
-          isFirst && styles.firstItem,
-          isLast && styles.lastItem,
-        ]}
-        activeOpacity={0.6}
-        onPress={() => {
-          Haptics.selectionAsync();
-          // Could navigate to price list detail
-        }}
-      >
-        <View
-          style={[
-            styles.iconContainer,
-            { backgroundColor: getIconColor(index) },
-          ]}
-        >
-          <Ionicons name={getIcon(index)} size={18} color="#fff" />
+  /* ─── Skeleton Grid ─── */
+  const renderSkeleton = () => (
+    <View style={s.grid}>
+      {[0, 1, 2, 3, 4, 5].map((i) => (
+        <View key={i} style={[s.card, { backgroundColor: colors.surface }]}>
+          <Bone width={40} height={40} radius={12} />
+          <Bone width={CARD_SIZE * 0.65} height={12} radius={4} />
+          <Bone width={CARD_SIZE * 0.45} height={10} radius={3} />
         </View>
+      ))}
+    </View>
+  );
 
-        <View style={styles.itemContent}>
-          <Text
-            style={[styles.listName, { color: colors.text }]}
-            numberOfLines={1}
-          >
-            {item.nombre}
-          </Text>
-        </View>
-
+  /* ─── Empty State ─── */
+  const renderEmpty = () => (
+    <View style={s.empty}>
+      <View style={[s.emptyCircle, { backgroundColor: colors.surface }]}>
         <Ionicons
-          name="chevron-forward"
-          size={18}
+          name="pricetag-outline"
+          size={32}
           color={colors.textTertiary}
         />
-
-        {!isLast && (
-          <View
-            style={[styles.separator, { backgroundColor: colors.border }]}
-          />
-        )}
-      </TouchableOpacity>
-    );
-  };
-
-  const renderEmptyState = () => (
-    <View style={styles.emptyState}>
-      <Ionicons name="pricetag-outline" size={48} color={colors.textTertiary} />
-      <Text style={[styles.emptyTitle, { color: colors.text }]}>
+      </View>
+      <Text style={[s.emptyTitle, { color: colors.text }]}>
         Sin listas de precios
       </Text>
-      <Text style={[styles.emptySubtitle, { color: colors.textTertiary }]}>
-        No se encontraron listas de precios en esta empresa
+      <Text style={[s.emptyDesc, { color: colors.textTertiary }]}>
+        No se encontraron listas de precios para esta empresa
       </Text>
     </View>
   );
 
+  /* ─── Card Grid ─── */
+  const renderGrid = () => (
+    <View style={s.grid}>
+      {filteredPrecios.map((item, index) => {
+        const theme = getTheme(index);
+        return (
+          <TouchableOpacity
+            key={`${item.nombre}-${index}`}
+            style={[s.card, { backgroundColor: colors.surface }]}
+            activeOpacity={0.7}
+            onPress={() => Haptics.selectionAsync()}
+          >
+            <View style={[s.cardIcon, { backgroundColor: `${theme.bg}18` }]}>
+              <Ionicons name={theme.icon} size={20} color={theme.bg} />
+            </View>
+            <Text
+              style={[s.cardName, { color: colors.text }]}
+              numberOfLines={2}
+            >
+              {item.nombre}
+            </Text>
+            <View style={s.cardFooter}>
+              <Text style={[s.cardLabel, { color: theme.bg }]}>
+                {theme.label}
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={14}
+                color={colors.textTertiary}
+              />
+            </View>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header with Back */}
-      <View style={[styles.header, { paddingTop: insets.top }]}>
+    <View style={[s.container, { backgroundColor: colors.background }]}>
+      {/* Header */}
+      <View style={[s.header, { paddingTop: insets.top }]}>
         <TouchableOpacity
-          style={styles.backBtn}
+          style={s.backBtn}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             router.back();
           }}
         >
           <Ionicons name="chevron-back" size={22} color={colors.accent} />
-          <Text style={[styles.backText, { color: colors.accent }]}>Atrás</Text>
+          <Text style={[s.backText, { color: colors.accent }]}>Atrás</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={onRefresh}>
           <Ionicons
@@ -201,17 +188,22 @@ export default function PreciosScreen() {
       </View>
 
       {/* Title */}
-      <Text style={[styles.title, { color: colors.text }]}>
-        Listas de Precios
-      </Text>
+      <Text style={[s.title, { color: colors.text }]}>Listas de Precios</Text>
+
+      {/* Count badge */}
+      {!loading && precios.length > 0 && (
+        <Text style={[s.countBadge, { color: colors.textTertiary }]}>
+          {filteredPrecios.length}{" "}
+          {filteredPrecios.length === 1 ? "lista" : "listas"}
+          {searchQuery ? ` encontradas` : ""}
+        </Text>
+      )}
 
       {/* Search Bar */}
-      <View
-        style={[styles.searchBar, { backgroundColor: colors.inputBackground }]}
-      >
+      <View style={[s.searchBar, { backgroundColor: colors.inputBackground }]}>
         <Ionicons name="search" size={16} color={colors.textTertiary} />
         <TextInput
-          style={[styles.searchInput, { color: colors.text }]}
+          style={[s.searchInput, { color: colors.text }]}
           placeholder="Buscar lista..."
           placeholderTextColor={colors.textTertiary}
           value={searchQuery}
@@ -228,60 +220,41 @@ export default function PreciosScreen() {
         )}
       </View>
 
-      {/* Loading State */}
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.accent} />
-          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-            Cargando listas de precios...
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={filteredPrecios}
-          keyExtractor={(item, index) => `${item.nombre}-${index}`}
-          renderItem={renderItem}
-          contentContainerStyle={[
-            styles.listContent,
-            filteredPrecios.length === 0 && styles.emptyContainer,
-          ]}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={colors.accent}
-            />
-          }
-          ListEmptyComponent={renderEmptyState}
-          ListFooterComponent={
-            filteredPrecios.length > 0
-              ? () => (
-                  <Text
-                    style={[styles.footerNote, { color: colors.textTertiary }]}
-                  >
-                    Mostrando {filteredPrecios.length} de {precios.length}{" "}
-                    listas
-                  </Text>
-                )
-              : null
-          }
-        />
-      )}
+      {/* Content */}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          s.scroll,
+          !loading && filteredPrecios.length === 0 && { flex: 1 },
+        ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.accent}
+          />
+        }
+      >
+        {loading
+          ? renderSkeleton()
+          : filteredPrecios.length === 0
+            ? renderEmpty()
+            : renderGrid()}
+      </ScrollView>
 
-      {/* New List Button */}
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
+      {/* FAB — New List */}
+      <View style={[s.footer, { paddingBottom: insets.bottom + 16 }]}>
         <TouchableOpacity
-          style={[styles.newListBtn, { backgroundColor: colors.accent }]}
+          style={[s.fab, { backgroundColor: colors.accent }]}
           onPress={handleNewList}
           activeOpacity={0.8}
         >
           <Ionicons name="add" size={20} color="#fff" />
-          <Text style={styles.newListBtnText}>Nueva Lista de Precios</Text>
+          <Text style={s.fabText}>Nueva Lista de Precios</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Create Price List Modal */}
+      {/* Create Modal */}
       <NuevaPrecioModal
         visible={showCreateModal}
         onClose={() => setShowCreateModal(false)}
@@ -295,7 +268,7 @@ export default function PreciosScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   container: { flex: 1 },
   header: {
     flexDirection: "row",
@@ -304,21 +277,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 8,
   },
-  backBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-  },
-  backText: {
-    fontSize: 17,
-  },
+  backBtn: { flexDirection: "row", alignItems: "center", gap: 2 },
+  backText: { fontSize: 17 },
   title: {
     fontSize: 32,
     fontWeight: "700",
     paddingHorizontal: 16,
     paddingTop: 4,
-    paddingBottom: 16,
+    paddingBottom: 4,
     letterSpacing: -0.5,
+  },
+  countBadge: {
+    fontSize: 13,
+    fontWeight: "500",
+    paddingHorizontal: 16,
+    paddingBottom: 12,
   },
   searchBar: {
     flexDirection: "row",
@@ -327,88 +300,69 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     height: 36,
     borderRadius: 10,
-    marginBottom: 20,
+    marginBottom: 12,
     gap: 6,
   },
   searchInput: { flex: 1, fontSize: 15 },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 12,
-  },
-  loadingText: {
-    fontSize: 14,
-  },
-  listContent: {
+  scroll: {
     paddingHorizontal: 16,
-    paddingBottom: 100,
+    paddingBottom: 110,
   },
-  emptyContainer: {
-    flex: 1,
-  },
-  listItem: {
+  // ─── Grid ───
+  grid: {
     flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    gap: 12,
-    position: "relative",
+    flexWrap: "wrap",
+    gap: GRID_GAP,
   },
-  firstItem: {
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
+  card: {
+    width: CARD_SIZE,
+    height: CARD_SIZE,
+    borderRadius: 18,
+    padding: 16,
+    justifyContent: "space-between",
   },
-  lastItem: {
-    borderBottomLeftRadius: 12,
-    borderBottomRightRadius: 12,
-  },
-  separator: {
-    position: "absolute",
-    left: 68,
-    right: 0,
-    bottom: 0,
-    height: StyleSheet.hairlineWidth,
-  },
-  iconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
+  cardIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
   },
-  itemContent: {
-    flex: 1,
-    gap: 2,
-  },
-  listName: {
-    fontSize: 16,
-    fontWeight: "400",
-    flexShrink: 1,
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 40,
-    gap: 8,
-  },
-  emptyTitle: {
-    fontSize: 18,
+  cardName: {
+    fontSize: 15,
     fontWeight: "600",
-    marginTop: 12,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    textAlign: "center",
-  },
-  footerNote: {
-    fontSize: 13,
-    textAlign: "center",
-    marginTop: 20,
-    paddingHorizontal: 20,
     lineHeight: 20,
   },
+  cardFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  cardLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  // ─── Empty ───
+  empty: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 40,
+    gap: 10,
+  },
+  emptyCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  emptyTitle: { fontSize: 18, fontWeight: "700" },
+  emptyDesc: { fontSize: 14, textAlign: "center", lineHeight: 20 },
+  // ─── Footer ───
   footer: {
     position: "absolute",
     bottom: 0,
@@ -417,15 +371,15 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingHorizontal: 16,
   },
-  newListBtn: {
+  fab: {
     flexDirection: "row",
     height: 50,
-    borderRadius: 12,
+    borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
     gap: 6,
   },
-  newListBtnText: {
+  fabText: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",

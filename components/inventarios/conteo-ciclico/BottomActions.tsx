@@ -32,10 +32,17 @@ export default function BottomActions({ disabled, onCancel, onSave }: Props) {
         style={[st.btn, st.secondary, { borderColor: colors.border }]}
         onPress={onCancel}
       >
-        <Text style={[st.secondaryText, { color: colors.textSecondary }]}>Cancelar</Text>
+        <Text style={[st.secondaryText, { color: colors.textSecondary }]}>
+          Cancelar
+        </Text>
       </TouchableOpacity>
       <TouchableOpacity
-        style={[st.btn, st.primary, { backgroundColor: colors.accent }, disabled && st.disabled]}
+        style={[
+          st.btn,
+          st.primary,
+          { backgroundColor: colors.accent },
+          disabled && st.disabled,
+        ]}
         onPress={onSave}
         disabled={disabled}
       >
@@ -47,8 +54,22 @@ export default function BottomActions({ disabled, onCancel, onSave }: Props) {
 }
 
 const st = StyleSheet.create({
-  container: { flexDirection: "row", padding: 16, paddingBottom: 16, gap: 12, borderTopWidth: 1 },
-  btn: { flex: 1, paddingVertical: 13, borderRadius: 10, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
+  container: {
+    flexDirection: "row",
+    padding: 16,
+    paddingBottom: 16,
+    gap: 12,
+    borderTopWidth: 1,
+  },
+  btn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
   secondary: { borderWidth: 1, backgroundColor: "transparent" },
   secondaryText: { fontSize: 14, fontWeight: "600" },
   primary: {},

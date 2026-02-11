@@ -1,4 +1,6 @@
 import ArticleCard from "@/components/inventarios/ArticleCard";
+import MovimientoDraftModal from "@/components/inventarios/MovimientoDraftModal";
+import MovimientoExitModal from "@/components/inventarios/MovimientoExitModal";
 import ProductDetailModal from "@/components/inventarios/ProductDetailModal";
 import ProductSearchBar from "@/components/inventarios/ProductSearchBar";
 import ScanHeader from "@/components/inventarios/ScanHeader";
@@ -6,6 +8,7 @@ import SuccessModal from "@/components/inventarios/SuccessModal";
 import { useAuth } from "@/context/auth-context";
 import { useThemeColors } from "@/context/theme-context";
 import { useArticleScanner } from "@/hooks/use-article-scanner";
+import { useMovimientoDraft } from "@/hooks/use-movimiento-draft";
 import { useSucursalesAlmacenes } from "@/hooks/use-sucursales-almacenes";
 import {
     buscarArticulosPorUbicacion,
@@ -16,7 +19,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
 import { router, Stack, useLocalSearchParams } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -63,6 +66,9 @@ export default function ConteoUbicacionScreen() {
     any | null
   >(null);
   const [showProductDetail, setShowProductDetail] = useState(false);
+  const [showExitModal, setShowExitModal] = useState(false);
+  const [showDraftModal, setShowDraftModal] = useState(false);
+  const draftRestored = useRef(false);
 
   // Estado para artículos de ubicación
   const [isLoadingArticulos, setIsLoadingArticulos] = useState(false);
@@ -104,6 +110,9 @@ export default function ConteoUbicacionScreen() {
     searchAndAddArticle,
   } = useArticleScanner();
 
+  const { pendingDraft, isLoadingDraft, saveDraft, clearDraft, dismissDraft } =
+    useMovimientoDraft("conteo_ubicacion_draft");
+
   const sucursalNombre =
     sucursales.find((s: any) => s.id === selectedSucursal)?.nombre || "";
   const almacenNombre =
@@ -137,6 +146,64 @@ export default function ConteoUbicacionScreen() {
       setTimeout(() => setShowUbicacionModal(true), 400);
     }
   };
+
+  // — Draft: detectar borrador pendiente al montar
+  useEffect(() => {
+    if (!isLoadingDraft && pendingDraft && !draftRestored.current) {
+      setShowDraftModal(true);
+    }
+  }, [isLoadingDraft, pendingDraft]);
+
+  // — Draft: auto-guardar cada cambio
+  useEffect(() => {
+    if (draftRestored.current || detalles.length === 0) return;
+    saveDraft({
+      sucursalId: selectedSucursal,
+      almacenId: selectedAlmacen,
+      extra: { ubicacion: ubicacionBusqueda },
+      detalles,
+      savedAt: Date.now(),
+    });
+  }, [detalles, selectedSucursal, selectedAlmacen, ubicacionBusqueda]);
+
+  const handleResumeDraft = useCallback(() => {
+    if (!pendingDraft) return;
+    draftRestored.current = true;
+    setShowDraftModal(false);
+    if (pendingDraft.sucursalId) setSelectedSucursal(pendingDraft.sucursalId);
+    if (pendingDraft.almacenId) setSelectedAlmacen(pendingDraft.almacenId);
+    if (pendingDraft.extra?.ubicacion)
+      setUbicacionBusqueda(pendingDraft.extra.ubicacion);
+    setDetalles(pendingDraft.detalles);
+    setShowLocationModal(false);
+  }, [pendingDraft]);
+
+  const handleDiscardDraft = useCallback(() => {
+    dismissDraft();
+    setShowDraftModal(false);
+  }, []);
+
+  const handleExit = useCallback(() => {
+    if (detalles.length === 0) {
+      clearDraft();
+      router.back();
+      return;
+    }
+    setShowExitModal(true);
+  }, [detalles]);
+
+  const handleExitSaveDraft = useCallback(() => {
+    setShowExitModal(false);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    router.back();
+  }, []);
+
+  const handleExitDiscard = useCallback(() => {
+    setShowExitModal(false);
+    clearDraft();
+    clearArticles();
+    router.back();
+  }, []);
 
   const handleBuscarUbicacion = async () => {
     // Asegurar transformación final antes de procesar
@@ -279,12 +346,14 @@ export default function ConteoUbicacionScreen() {
 
   const handleSuccessClose = () => {
     setShowSuccessModal(false);
+    clearDraft();
     clearArticles();
     router.back();
   };
 
   const handleNewConteo = () => {
     setShowSuccessModal(false);
+    clearDraft();
     clearArticles();
     setUbicacionBusqueda("");
     setSavedResult(null);
@@ -306,7 +375,7 @@ export default function ConteoUbicacionScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
-  if (isLoading) {
+  if (isLoading || isLoadingDraft) {
     return (
       <View
         style={[styles.centerContainer, { backgroundColor: colors.background }]}
@@ -359,6 +428,11 @@ export default function ConteoUbicacionScreen() {
         options={{
           headerTitle: "Conteo por Ubicación",
           headerTitleAlign: "center",
+          headerLeft: () => (
+            <TouchableOpacity onPress={handleExit} style={{ paddingRight: 8 }}>
+              <Ionicons name="arrow-back" size={24} color={colors.text} />
+            </TouchableOpacity>
+          ),
           headerRight: () => (
             <View style={{ marginRight: Platform.OS === "android" ? 8 : 0 }}>
               <ScanHeader
@@ -536,7 +610,7 @@ export default function ConteoUbicacionScreen() {
               styles.secondaryButton,
               { borderColor: colors.border },
             ]}
-            onPress={() => router.back()}
+            onPress={handleExit}
           >
             <Text
               style={[
@@ -746,7 +820,7 @@ export default function ConteoUbicacionScreen() {
           if (detalles.length > 0) {
             setShowUbicacionModal(false);
           } else {
-            router.back();
+            handleExit();
           }
         }}
       >
@@ -763,7 +837,7 @@ export default function ConteoUbicacionScreen() {
                 if (detalles.length > 0) {
                   setShowUbicacionModal(false);
                 } else {
-                  router.back();
+                  handleExit();
                 }
               }}
             >
@@ -1084,6 +1158,23 @@ export default function ConteoUbicacionScreen() {
         visible={showProductDetail}
         articulo={selectedArticleForDetail}
         onClose={() => setShowProductDetail(false)}
+      />
+
+      <MovimientoDraftModal
+        visible={showDraftModal}
+        draft={pendingDraft}
+        title="Conteo en curso"
+        onResume={handleResumeDraft}
+        onDiscard={handleDiscardDraft}
+      />
+
+      <MovimientoExitModal
+        visible={showExitModal}
+        totalArticulos={totalArticulos}
+        totalUnidades={totalUnidades}
+        onSaveDraft={handleExitSaveDraft}
+        onDiscardExit={handleExitDiscard}
+        onCancel={() => setShowExitModal(false)}
       />
     </GestureHandlerRootView>
   );

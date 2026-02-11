@@ -1,11 +1,13 @@
+import { Bone } from '@/components/Skeleton';
 import { useThemeColors } from '@/context/theme-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-    FlatList,
+    Dimensions,
     RefreshControl,
+    ScrollView,
     StyleSheet,
     Text,
     TextInput,
@@ -25,6 +27,10 @@ interface Clasificador {
     iconColor: string;
 }
 
+const { width } = Dimensions.get('window');
+const GRID_GAP = 12;
+const CARD_SIZE = (width - 32 - GRID_GAP) / 2;
+
 const MOCK_CLASIFICADORES: Clasificador[] = [
     { id: 1, nombre: 'Marca', codigo: 'MRC', count: 24, icon: 'pricetag', iconColor: '#8B5CF6' },
     { id: 2, nombre: 'Categoría', codigo: 'CAT', count: 105, icon: 'grid', iconColor: '#0D9488' },
@@ -39,9 +45,15 @@ export default function ClasificadoresScreen() {
     const router = useRouter();
     const [searchQuery, setSearchQuery] = useState('');
     const [refreshing, setRefreshing] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [showCreateModal, setShowCreateModal] = useState(false);
 
-    const filteredItems = MOCK_CLASIFICADORES.filter(item => 
+    useEffect(() => {
+        const t = setTimeout(() => setLoading(false), 600);
+        return () => clearTimeout(t);
+    }, []);
+
+    const filteredItems = MOCK_CLASIFICADORES.filter(item =>
         item.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.codigo.toLowerCase().includes(searchQuery.toLowerCase())
     );
@@ -57,104 +69,140 @@ export default function ClasificadoresScreen() {
         setShowCreateModal(true);
     };
 
-    const renderItem = ({ item, index }: { item: Clasificador; index: number }) => {
-        const isFirst = index === 0;
-        const isLast = index === filteredItems.length - 1;
-        
-        return (
-            <TouchableOpacity 
-                style={[
-                    styles.listItem, 
-                    { backgroundColor: colors.surface },
-                    isFirst && styles.firstItem,
-                    isLast && styles.lastItem,
-                ]}
-                activeOpacity={0.6}
-                onPress={() => Haptics.selectionAsync()}
-            >
-                <View style={[styles.iconContainer, { backgroundColor: `${item.iconColor}15` }]}>
-                    <Ionicons name={item.icon} size={18} color={item.iconColor} />
+    /* ─── Skeleton ─── */
+    const renderSkeleton = () => (
+        <View style={s.grid}>
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+                <View key={i} style={[s.card, { backgroundColor: colors.surface }]}>
+                    <Bone width={40} height={40} radius={12} />
+                    <Bone width={CARD_SIZE * 0.65} height={12} radius={4} />
+                    <Bone width={CARD_SIZE * 0.4} height={10} radius={3} />
                 </View>
-                
-                <View style={styles.itemContent}>
-                    <Text style={[styles.itemName, { color: colors.text }]}>{item.nombre}</Text>
-                    <Text style={[styles.itemCode, { color: colors.textTertiary }]}>{item.codigo}</Text>
-                </View>
-                
-                <Text style={[styles.itemCount, { color: colors.textTertiary }]}>{item.count}</Text>
-                <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
-                
-                {!isLast && (
-                    <View style={[styles.separator, { backgroundColor: colors.border }]} />
-                )}
-            </TouchableOpacity>
-        );
-    };
+            ))}
+        </View>
+    );
+
+    /* ─── Empty ─── */
+    const renderEmpty = () => (
+        <View style={s.empty}>
+            <View style={[s.emptyCircle, { backgroundColor: colors.surface }]}>
+                <Ionicons name="options-outline" size={32} color={colors.textTertiary} />
+            </View>
+            <Text style={[s.emptyTitle, { color: colors.text }]}>Sin clasificadores</Text>
+            <Text style={[s.emptyDesc, { color: colors.textTertiary }]}>
+                No se encontraron clasificadores
+            </Text>
+        </View>
+    );
+
+    /* ─── Grid ─── */
+    const renderGrid = () => (
+        <View style={s.grid}>
+            {filteredItems.map((item) => (
+                <TouchableOpacity
+                    key={item.id.toString()}
+                    style={[s.card, { backgroundColor: colors.surface }]}
+                    activeOpacity={0.7}
+                    onPress={() => Haptics.selectionAsync()}
+                >
+                    <View style={[s.cardIcon, { backgroundColor: `${item.iconColor}18` }]}>
+                        <Ionicons name={item.icon} size={20} color={item.iconColor} />
+                    </View>
+                    <View>
+                        <Text style={[s.cardName, { color: colors.text }]} numberOfLines={2}>
+                            {item.nombre}
+                        </Text>
+                        <Text style={[s.cardCode, { color: colors.textTertiary }]}>{item.codigo}</Text>
+                    </View>
+                    <View style={s.cardFooter}>
+                        <Text style={[s.cardLabel, { color: item.iconColor }]}>
+                            {item.count} items
+                        </Text>
+                        <Ionicons name="chevron-forward" size={14} color={colors.textTertiary} />
+                    </View>
+                </TouchableOpacity>
+            ))}
+        </View>
+    );
 
     return (
-        <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[s.container, { backgroundColor: colors.background }]}>
             {/* Header */}
-            <View style={[styles.header, { paddingTop: insets.top }]}>
-                <TouchableOpacity 
-                    style={styles.backBtn}
+            <View style={[s.header, { paddingTop: insets.top }]}>
+                <TouchableOpacity
+                    style={s.backBtn}
                     onPress={() => {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                         router.back();
                     }}
                 >
                     <Ionicons name="chevron-back" size={22} color={colors.accent} />
-                    <Text style={[styles.backText, { color: colors.accent }]}>Atrás</Text>
+                    <Text style={[s.backText, { color: colors.accent }]}>Atrás</Text>
                 </TouchableOpacity>
-                <TouchableOpacity>
-                    <Text style={[styles.editBtn, { color: colors.accent }]}>Editar</Text>
+                <TouchableOpacity onPress={onRefresh}>
+                    <Ionicons name="refresh-outline" size={22} color={colors.textTertiary} />
                 </TouchableOpacity>
             </View>
 
             {/* Title */}
-            <Text style={[styles.title, { color: colors.text }]}>Clasificadores</Text>
+            <Text style={[s.title, { color: colors.text }]}>Clasificadores</Text>
 
-            {/* Search Bar */}
-            <View style={[styles.searchBar, { backgroundColor: colors.inputBackground }]}>
+            {/* Count */}
+            {!loading && (
+                <Text style={[s.countBadge, { color: colors.textTertiary }]}>
+                    {filteredItems.length} {filteredItems.length === 1 ? 'clasificador' : 'clasificadores'}
+                    {searchQuery ? ' encontrados' : ''}
+                </Text>
+            )}
+
+            {/* Search */}
+            <View style={[s.searchBar, { backgroundColor: colors.inputBackground }]}>
                 <Ionicons name="search" size={16} color={colors.textTertiary} />
                 <TextInput
-                    style={[styles.searchInput, { color: colors.text }]}
-                    placeholder="Search by name or code..."
+                    style={[s.searchInput, { color: colors.text }]}
+                    placeholder="Buscar clasificadores..."
                     placeholderTextColor={colors.textTertiary}
                     value={searchQuery}
                     onChangeText={setSearchQuery}
                 />
+                {searchQuery.length > 0 && (
+                    <TouchableOpacity onPress={() => setSearchQuery('')}>
+                        <Ionicons name="close-circle" size={18} color={colors.textTertiary} />
+                    </TouchableOpacity>
+                )}
             </View>
 
-            {/* List */}
-            <FlatList
-                data={filteredItems}
-                keyExtractor={(item) => item.id.toString()}
-                renderItem={renderItem}
-                contentContainerStyle={styles.listContent}
+            {/* Content */}
+            <ScrollView
                 showsVerticalScrollIndicator={false}
+                contentContainerStyle={[
+                    s.scroll,
+                    !loading && filteredItems.length === 0 && { flex: 1 },
+                ]}
                 refreshControl={
                     <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />
                 }
-                ListFooterComponent={() => (
-                    <Text style={[styles.footerNote, { color: colors.textTertiary }]}>
-                        Swipe left on an item to edit or delete.
-                    </Text>
-                )}
-            />
+            >
+                {loading && !refreshing
+                    ? renderSkeleton()
+                    : filteredItems.length === 0
+                        ? renderEmpty()
+                        : renderGrid()}
+            </ScrollView>
 
-            {/* New Button */}
-            <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
-                <TouchableOpacity 
-                    style={[styles.newBtn, { backgroundColor: colors.accent }]}
+            {/* FAB */}
+            <View style={[s.footer, { paddingBottom: insets.bottom + 16 }]}>
+                <TouchableOpacity
+                    style={[s.fab, { backgroundColor: colors.accent }]}
                     onPress={handleNewClasificador}
                     activeOpacity={0.8}
                 >
                     <Ionicons name="add" size={20} color="#fff" />
-                    <Text style={styles.newBtnText}>Nuevo Clasificador</Text>
+                    <Text style={s.fabText}>Nuevo Clasificador</Text>
                 </TouchableOpacity>
             </View>
 
-            {/* Create Modal */}
+            {/* Modal */}
             <NuevoClasificadorModal
                 visible={showCreateModal}
                 onClose={() => setShowCreateModal(false)}
@@ -167,7 +215,7 @@ export default function ClasificadoresScreen() {
     );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
     container: { flex: 1 },
     header: {
         flexDirection: 'row',
@@ -176,24 +224,21 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         paddingBottom: 8,
     },
-    backBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 2,
-    },
-    backText: {
-        fontSize: 17,
-    },
-    editBtn: {
-        fontSize: 17,
-    },
+    backBtn: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+    backText: { fontSize: 17 },
     title: {
         fontSize: 32,
         fontWeight: '700',
         paddingHorizontal: 16,
         paddingTop: 4,
-        paddingBottom: 16,
+        paddingBottom: 4,
         letterSpacing: -0.5,
+    },
+    countBadge: {
+        fontSize: 13,
+        fontWeight: '500',
+        paddingHorizontal: 16,
+        paddingBottom: 12,
     },
     searchBar: {
         flexDirection: 'row',
@@ -202,66 +247,74 @@ const styles = StyleSheet.create({
         paddingHorizontal: 10,
         height: 36,
         borderRadius: 10,
-        marginBottom: 20,
+        marginBottom: 12,
         gap: 6,
     },
     searchInput: { flex: 1, fontSize: 15 },
-    listContent: {
+    scroll: {
         paddingHorizontal: 16,
-        paddingBottom: 100,
+        paddingBottom: 110,
     },
-    listItem: {
+    // ─── Grid ───
+    grid: {
         flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 14,
-        paddingHorizontal: 12,
-        gap: 12,
-        position: 'relative',
+        flexWrap: 'wrap',
+        gap: GRID_GAP,
     },
-    firstItem: {
-        borderTopLeftRadius: 12,
-        borderTopRightRadius: 12,
+    card: {
+        width: CARD_SIZE,
+        height: CARD_SIZE,
+        borderRadius: 18,
+        padding: 16,
+        justifyContent: 'space-between',
     },
-    lastItem: {
-        borderBottomLeftRadius: 12,
-        borderBottomRightRadius: 12,
-    },
-    separator: {
-        position: 'absolute',
-        left: 60,
-        right: 0,
-        bottom: 0,
-        height: StyleSheet.hairlineWidth,
-    },
-    iconContainer: {
-        width: 36,
-        height: 36,
-        borderRadius: 8,
+    cardIcon: {
+        width: 42,
+        height: 42,
+        borderRadius: 12,
         justifyContent: 'center',
         alignItems: 'center',
     },
-    itemContent: {
-        flex: 1,
-        gap: 2,
-    },
-    itemName: {
-        fontSize: 16,
-        fontWeight: '500',
-    },
-    itemCode: {
-        fontSize: 12,
-        fontWeight: '600',
-    },
-    itemCount: {
+    cardName: {
         fontSize: 15,
-        marginRight: 4,
+        fontWeight: '600',
+        lineHeight: 20,
     },
-    footerNote: {
-        fontSize: 13,
-        textAlign: 'center',
-        marginTop: 20,
-        fontStyle: 'italic',
+    cardCode: {
+        fontSize: 11,
+        fontWeight: '600',
+        marginTop: 2,
     },
+    cardFooter: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    cardLabel: {
+        fontSize: 11,
+        fontWeight: '700',
+        letterSpacing: 0.5,
+        textTransform: 'uppercase',
+    },
+    // ─── Empty ───
+    empty: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 40,
+        gap: 10,
+    },
+    emptyCircle: {
+        width: 72,
+        height: 72,
+        borderRadius: 36,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 4,
+    },
+    emptyTitle: { fontSize: 18, fontWeight: '700' },
+    emptyDesc: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
+    // ─── Footer ───
     footer: {
         position: 'absolute',
         bottom: 0,
@@ -270,15 +323,15 @@ const styles = StyleSheet.create({
         paddingTop: 12,
         paddingHorizontal: 16,
     },
-    newBtn: {
+    fab: {
         flexDirection: 'row',
         height: 50,
-        borderRadius: 12,
+        borderRadius: 14,
         justifyContent: 'center',
         alignItems: 'center',
         gap: 6,
     },
-    newBtnText: {
+    fabText: {
         color: '#fff',
         fontSize: 16,
         fontWeight: '600',

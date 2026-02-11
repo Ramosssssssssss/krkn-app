@@ -7,16 +7,16 @@ import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    KeyboardAvoidingView,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Animated,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 const FACE_ID_ENABLED_KEY = "@krkn_face_id_enabled";
@@ -266,7 +266,7 @@ export default function LoginScreen() {
             <Ionicons name="chevron-back" size={22} color={colors.text} />
           </TouchableOpacity>
           <Text style={[styles.topBarTitle, { color: colors.textSecondary }]}>
-            {companyCode?.toUpperCase()}
+            {companyCode?.toLowerCase()}.krkn.mx
           </Text>
           <TouchableOpacity
             onPress={toggleTheme}
@@ -289,7 +289,7 @@ export default function LoginScreen() {
         >
           {/* Brand */}
           <Text style={[styles.brandLetter, { color: colors.accent }]}>
-            {companyCode?.charAt(0).toUpperCase() || "K"}
+            {companyCode?.toUpperCase() || "KRKN"}
           </Text>
           <Text style={[styles.title, { color: colors.text }]}>Bienvenido</Text>
           <Text style={[styles.subtitle, { color: colors.textTertiary }]}>
@@ -355,10 +355,10 @@ export default function LoginScreen() {
                 placeholderTextColor={colors.textTertiary}
                 value={password}
                 onChangeText={(t) => {
-                  setPassword(t.toUpperCase());
+                  setPassword(t);
                   setError("");
                 }}
-                autoCapitalize="characters"
+                autoCapitalize="none"
                 secureTextEntry={!showPassword}
                 editable={!isLoading}
                 onFocus={() => setFocusedField("password")}
@@ -495,9 +495,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   brandLetter: {
-    fontSize: 52,
+    fontSize: 36,
     fontWeight: "800",
-    letterSpacing: -2,
+    letterSpacing: 1,
     marginBottom: 2,
   },
   title: {

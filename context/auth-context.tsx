@@ -170,10 +170,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const updateUser = async (userData: Partial<User>): Promise<void> => {
-    if (!user) return;
+    // Use functional updater to avoid stale closure when multiple
+    // sequential calls happen (e.g. saveAvatar then saveProfileData)
+    let updatedUser: User | null = null;
 
-    const updatedUser = { ...user, ...userData };
-    setUser(updatedUser);
+    setUser((prev) => {
+      if (!prev) return prev;
+      updatedUser = { ...prev, ...userData };
+      return updatedUser;
+    });
+
+    if (!updatedUser) return;
 
     // Guardar sesión actualizada en storage
     await saveSession({

@@ -1,10 +1,10 @@
+import { Bone } from "@/components/Skeleton";
 import { useThemeColors } from "@/context/theme-context";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import React, { useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
     Animated,
     Modal,
     ScrollView,
@@ -76,12 +76,10 @@ export default function GanchoModal({
         let nivelesData = (data.ubicaciones || []).filter(
           (u: NivelInfo) => u.maximo > 0 || u.minimo > 0 || u.puntoReorden > 0,
         );
-        // Si hay sucursalNombre, filtrar solo esa sucursal/almacén
         if (sucursalNombre) {
           const searchName = sucursalNombre.toLowerCase().trim();
           nivelesData = nivelesData.filter((n: NivelInfo) => {
             const almName = n.almacen?.toLowerCase().trim() || "";
-            // Excluir CEDIS y buscar coincidencia
             if (almName.includes("cedis")) return false;
             return almName === searchName || almName.includes(searchName);
           });
@@ -102,6 +100,12 @@ export default function GanchoModal({
 
   if (!articulo) return null;
 
+  const getLevelColor = (type: "min" | "reorden" | "max") => {
+    if (type === "min") return "#ef4444";
+    if (type === "reorden") return colors.accent;
+    return "#22c55e";
+  };
+
   return (
     <Modal
       visible={visible}
@@ -110,8 +114,8 @@ export default function GanchoModal({
       onRequestClose={handleClose}
       statusBarTranslucent
     >
-      <View style={styles.backdrop}>
-        <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
+      <View style={s.backdrop}>
+        <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
         <TouchableOpacity
           style={StyleSheet.absoluteFill}
           activeOpacity={1}
@@ -119,207 +123,189 @@ export default function GanchoModal({
         />
         <Animated.View
           style={[
-            styles.container,
+            s.sheet,
             {
               backgroundColor: colors.background,
-              paddingBottom: insets.bottom + 20,
+              paddingBottom: insets.bottom + 16,
               transform: [{ translateY: slideAnim }],
             },
           ]}
         >
-          {/* Handle Bar */}
-          <View style={styles.handleBar}>
-            <View style={[styles.handle, { backgroundColor: colors.border }]} />
+          {/* Handle */}
+          <View style={s.handleWrap}>
+            <View style={[s.handle, { backgroundColor: colors.border }]} />
           </View>
 
           {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.headerLeft}>
-              <View
-                style={[
-                  styles.headerIcon,
-                  { backgroundColor: `${colors.accent}15` },
-                ]}
-              >
-                <Ionicons name="analytics" size={20} color={colors.accent} />
-              </View>
-              <View style={styles.headerText}>
-                <Text style={[styles.title, { color: colors.text }]}>
-                  Gancho
-                </Text>
-                <Text
-                  style={[styles.subtitle, { color: colors.textTertiary }]}
-                  numberOfLines={1}
-                >
-                  {articulo.sku} · Niveles de inventario
-                </Text>
-              </View>
-            </View>
+          <View style={s.header}>
+            <Text style={[s.headerTitle, { color: colors.text }]}>
+              Puntos de Reorden
+            </Text>
             <TouchableOpacity
               onPress={handleClose}
-              style={[styles.closeBtn, { backgroundColor: colors.surface }]}
+              style={[s.closeBtn, { backgroundColor: colors.surface }]}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <Ionicons name="close" size={18} color={colors.textSecondary} />
+              <Ionicons name="close" size={16} color={colors.textTertiary} />
             </TouchableOpacity>
+          </View>
+
+          {/* Article info pill */}
+          <View style={[s.articlePill, { backgroundColor: colors.surface }]}>
+            <Ionicons
+              name="pricetag-outline"
+              size={14}
+              color={colors.textTertiary}
+            />
+            <Text
+              style={[s.articleSku, { color: colors.textSecondary }]}
+              numberOfLines={1}
+            >
+              {articulo.sku}
+            </Text>
+            <Text style={{ color: colors.border }}>·</Text>
+            <Text
+              style={[s.articleName, { color: colors.text }]}
+              numberOfLines={1}
+            >
+              {articulo.nombre}
+            </Text>
           </View>
 
           {/* Content */}
           <ScrollView
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.content}
+            contentContainerStyle={s.scrollContent}
             bounces={true}
           >
             {loading ? (
-              <View style={styles.loadingContainer}>
-                <View
-                  style={[
-                    styles.loadingBox,
-                    { backgroundColor: colors.surface },
-                  ]}
-                >
-                  <ActivityIndicator size="small" color={colors.accent} />
-                  <Text
-                    style={[styles.loadingText, { color: colors.textTertiary }]}
+              <View
+                style={[s.groupedCard, { backgroundColor: colors.surface }]}
+              >
+                {[0, 1, 2].map((i) => (
+                  <View
+                    key={i}
+                    style={[
+                      s.row,
+                      { borderBottomColor: colors.border },
+                      i === 2 && { borderBottomWidth: 0 },
+                    ]}
                   >
-                    Consultando niveles...
-                  </Text>
-                </View>
+                    <View style={{ flex: 1, gap: 6 }}>
+                      <Bone width={100} height={13} radius={4} />
+                      <Bone width={60} height={10} radius={4} />
+                    </View>
+                    <View style={{ flexDirection: "row", gap: 20 }}>
+                      <View style={{ alignItems: "center", gap: 4 }}>
+                        <Bone width={30} height={20} radius={5} />
+                        <Bone width={24} height={8} radius={3} />
+                      </View>
+                      <View style={{ alignItems: "center", gap: 4 }}>
+                        <Bone width={30} height={20} radius={5} />
+                        <Bone width={24} height={8} radius={3} />
+                      </View>
+                      <View style={{ alignItems: "center", gap: 4 }}>
+                        <Bone width={30} height={20} radius={5} />
+                        <Bone width={24} height={8} radius={3} />
+                      </View>
+                    </View>
+                  </View>
+                ))}
               </View>
             ) : niveles.length > 0 ? (
-              <View style={styles.listContainer}>
+              <View
+                style={[s.groupedCard, { backgroundColor: colors.surface }]}
+              >
                 {niveles.map((item, idx) => (
                   <View
                     key={idx}
                     style={[
-                      styles.nivelCard,
-                      { backgroundColor: colors.surface },
+                      s.row,
+                      { borderBottomColor: colors.border },
+                      idx === niveles.length - 1 && { borderBottomWidth: 0 },
                     ]}
                   >
-                    {/* Header del almacén */}
-                    <View style={styles.cardHeader}>
-                      <View
-                        style={[
-                          styles.almacenBadge,
-                          { backgroundColor: `${colors.accent}10` },
-                        ]}
+                    {/* Left — almacen + ubicacion */}
+                    <View style={s.rowLeft}>
+                      <Text
+                        style={[s.almacenName, { color: colors.text }]}
+                        numberOfLines={1}
                       >
-                        <Ionicons
-                          name="business"
-                          size={14}
-                          color={colors.accent}
-                        />
-                        <Text
-                          style={[styles.almacenText, { color: colors.accent }]}
-                        >
-                          {item.almacen}
-                        </Text>
-                      </View>
-                      {item.ubicacion && (
-                        <View
-                          style={[
-                            styles.ubicacionBadge,
-                            { backgroundColor: colors.background },
-                          ]}
-                        >
+                        {item.almacen}
+                      </Text>
+                      {item.ubicacion ? (
+                        <View style={s.ubicRow}>
                           <Ionicons
-                            name="location"
-                            size={12}
+                            name="location-outline"
+                            size={11}
                             color={colors.textTertiary}
                           />
                           <Text
-                            style={[
-                              styles.ubicacionText,
-                              { color: colors.textTertiary },
-                            ]}
+                            style={[s.ubicText, { color: colors.textTertiary }]}
                           >
                             {item.ubicacion}
                           </Text>
                         </View>
-                      )}
+                      ) : null}
                     </View>
 
-                    {/* Niveles en fila */}
-                    <View style={styles.nivelesRow}>
-                      {/* Mínimo */}
-                      <View style={styles.nivelItem}>
-                        <View
-                          style={[
-                            styles.nivelDot,
-                            { backgroundColor: colors.warning || "#f59e0b" },
-                          ]}
-                        />
+                    {/* Right — 3 level columns */}
+                    <View style={s.levelsRow}>
+                      <View style={s.levelCol}>
                         <Text
                           style={[
-                            styles.nivelLabel,
-                            { color: colors.textTertiary },
+                            s.levelValue,
+                            { color: getLevelColor("min") },
                           ]}
-                        >
-                          Mínimo
-                        </Text>
-                        <Text
-                          style={[styles.nivelValue, { color: colors.text }]}
                         >
                           {item.minimo}
                         </Text>
+                        <Text
+                          style={[s.levelLabel, { color: colors.textTertiary }]}
+                        >
+                          MIN
+                        </Text>
                       </View>
-
                       <View
                         style={[
-                          styles.nivelDivider,
+                          s.levelDivider,
                           { backgroundColor: colors.border },
                         ]}
                       />
-
-                      {/* Reorden */}
-                      <View style={styles.nivelItem}>
-                        <View
-                          style={[
-                            styles.nivelDot,
-                            { backgroundColor: colors.accent },
-                          ]}
-                        />
+                      <View style={s.levelCol}>
                         <Text
                           style={[
-                            styles.nivelLabel,
-                            { color: colors.textTertiary },
+                            s.levelValue,
+                            { color: getLevelColor("reorden") },
                           ]}
-                        >
-                          Reorden
-                        </Text>
-                        <Text
-                          style={[styles.nivelValue, { color: colors.text }]}
                         >
                           {item.puntoReorden}
                         </Text>
+                        <Text
+                          style={[s.levelLabel, { color: colors.textTertiary }]}
+                        >
+                          P.R.
+                        </Text>
                       </View>
-
                       <View
                         style={[
-                          styles.nivelDivider,
+                          s.levelDivider,
                           { backgroundColor: colors.border },
                         ]}
                       />
-
-                      {/* Máximo */}
-                      <View style={styles.nivelItem}>
-                        <View
-                          style={[
-                            styles.nivelDot,
-                            { backgroundColor: colors.success || "#22c55e" },
-                          ]}
-                        />
+                      <View style={s.levelCol}>
                         <Text
                           style={[
-                            styles.nivelLabel,
-                            { color: colors.textTertiary },
+                            s.levelValue,
+                            { color: getLevelColor("max") },
                           ]}
-                        >
-                          Máximo
-                        </Text>
-                        <Text
-                          style={[styles.nivelValue, { color: colors.text }]}
                         >
                           {item.maximo}
+                        </Text>
+                        <Text
+                          style={[s.levelLabel, { color: colors.textTertiary }]}
+                        >
+                          MÁX
                         </Text>
                       </View>
                     </View>
@@ -327,26 +313,21 @@ export default function GanchoModal({
                 ))}
               </View>
             ) : (
-              <View style={styles.emptyContainer}>
+              <View style={s.emptyWrap}>
                 <View
-                  style={[
-                    styles.emptyIcon,
-                    { backgroundColor: colors.surface },
-                  ]}
+                  style={[s.emptyCircle, { backgroundColor: colors.surface }]}
                 >
                   <Ionicons
                     name="analytics-outline"
-                    size={32}
+                    size={28}
                     color={colors.textTertiary}
                   />
                 </View>
-                <Text style={[styles.emptyTitle, { color: colors.text }]}>
-                  Sin niveles configurados
+                <Text style={[s.emptyTitle, { color: colors.text }]}>
+                  Sin niveles
                 </Text>
-                <Text
-                  style={[styles.emptyText, { color: colors.textTertiary }]}
-                >
-                  Este artículo no tiene puntos de reorden
+                <Text style={[s.emptyDesc, { color: colors.textTertiary }]}>
+                  Este artículo no tiene puntos de reorden configurados
                 </Text>
               </View>
             )}
@@ -357,178 +338,79 @@ export default function GanchoModal({
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    justifyContent: "flex-end",
-  },
-  container: {
+const s = StyleSheet.create({
+  backdrop: { flex: 1, justifyContent: "flex-end" },
+  sheet: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: "75%",
+    maxHeight: "70%",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 20,
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 24,
   },
-  handleBar: {
-    alignItems: "center",
-    paddingVertical: 12,
-  },
-  handle: {
-    width: 36,
-    height: 5,
-    borderRadius: 3,
-  },
+  handleWrap: { alignItems: "center", paddingTop: 10, paddingBottom: 6 },
+  handle: { width: 36, height: 4, borderRadius: 2 },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingBottom: 16,
-  },
-  headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  headerIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  headerText: {
-    flex: 1,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: "700",
-    letterSpacing: -0.4,
-  },
-  subtitle: {
-    fontSize: 13,
-    marginTop: 2,
-  },
-  closeBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  content: {
-    paddingHorizontal: 20,
-    paddingBottom: 10,
-  },
-  loadingContainer: {
-    paddingVertical: 40,
-  },
-  loadingBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 16,
-    borderRadius: 12,
-    gap: 12,
-  },
-  loadingText: {
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  listContainer: {
-    gap: 12,
-  },
-  nivelCard: {
-    borderRadius: 16,
-    overflow: "hidden",
-  },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingTop: 16,
     paddingBottom: 12,
   },
-  almacenBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    gap: 6,
-  },
-  almacenText: {
-    fontSize: 12,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  ubicacionBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    gap: 4,
-  },
-  ubicacionText: {
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  nivelesRow: {
-    flexDirection: "row",
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-  },
-  nivelItem: {
-    flex: 1,
-    alignItems: "center",
-  },
-  nivelDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginBottom: 8,
-  },
-  nivelLabel: {
-    fontSize: 11,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.3,
-    marginBottom: 4,
-  },
-  nivelValue: {
-    fontSize: 22,
-    fontWeight: "800",
-  },
-  nivelDivider: {
-    width: 1,
-    marginHorizontal: 8,
-  },
-  emptyContainer: {
-    paddingVertical: 50,
-    alignItems: "center",
-  },
-  emptyIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
+  headerTitle: { fontSize: 18, fontWeight: "700", letterSpacing: -0.3 },
+  closeBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
+  },
+  articlePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    gap: 6,
     marginBottom: 16,
   },
-  emptyTitle: {
-    fontSize: 17,
-    fontWeight: "600",
-    marginBottom: 6,
+  articleSku: { fontSize: 12, fontWeight: "600" },
+  articleName: { fontSize: 12, fontWeight: "500", flex: 1 },
+  scrollContent: { paddingHorizontal: 20, paddingBottom: 8 },
+  groupedCard: { borderRadius: 14, overflow: "hidden" },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  emptyText: {
-    fontSize: 14,
-    textAlign: "center",
+  rowLeft: { flex: 1, marginRight: 12 },
+  almacenName: { fontSize: 15, fontWeight: "600" },
+  ubicRow: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 3 },
+  ubicText: { fontSize: 11, fontWeight: "500" },
+  levelsRow: { flexDirection: "row", alignItems: "center" },
+  levelCol: { alignItems: "center", width: 44 },
+  levelValue: { fontSize: 17, fontWeight: "800" },
+  levelLabel: {
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.3,
+    marginTop: 2,
   },
+  levelDivider: { width: 1, height: 24, marginHorizontal: 6 },
+  emptyWrap: { alignItems: "center", paddingVertical: 44 },
+  emptyCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 14,
+  },
+  emptyTitle: { fontSize: 16, fontWeight: "600", marginBottom: 4 },
+  emptyDesc: { fontSize: 13, textAlign: "center", lineHeight: 18 },
 });

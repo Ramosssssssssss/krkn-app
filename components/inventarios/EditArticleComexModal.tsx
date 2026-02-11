@@ -1,3 +1,4 @@
+import { SkeletonDetailForm } from "@/components/Skeleton";
 import { API_CONFIG } from "@/config/api";
 import { useTheme, useThemeColors } from "@/context/theme-context";
 import { useSystemSounds } from "@/hooks/use-system-sounds";
@@ -6,7 +7,6 @@ import * as Haptics from "expo-haptics";
 import LottieView from "lottie-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
     Alert,
     Modal,
     ScrollView,
@@ -363,12 +363,7 @@ export default function EditArticleComexModal({
 
         {/* ── Body ───────────────────────────── */}
         {loading ? (
-          <View style={styles.centerWrap}>
-            <ActivityIndicator size="large" color={ACCENT} />
-            <Text style={[styles.centerText, { color: colors.textSecondary }]}>
-              Consultando artículo...
-            </Text>
-          </View>
+          <SkeletonDetailForm />
         ) : error ? (
           <View style={styles.centerWrap}>
             <Ionicons name="alert-circle" size={60} color="#EF4444" />

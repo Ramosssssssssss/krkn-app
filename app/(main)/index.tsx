@@ -1,3 +1,4 @@
+import { Bone } from "@/components/Skeleton";
 import { API_CONFIG } from "@/config/api";
 import { useAuth } from "@/context/auth-context";
 import { useLanguage } from "@/context/language-context";
@@ -8,7 +9,6 @@ import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
     Animated,
     Modal,
     Platform,
@@ -183,10 +183,11 @@ export default function HomeScreen() {
               <Ionicons name="server-outline" size={14} color={colors.accent} />
             </View>
             {loadingDatabases ? (
-              <ActivityIndicator
-                size="small"
-                color={colors.accent}
-                style={{ marginLeft: 8 }}
+              <Bone
+                width={120}
+                height={14}
+                radius={4}
+                style={{ marginLeft: 10 }}
               />
             ) : selectedDb ? (
               <>
@@ -233,7 +234,7 @@ export default function HomeScreen() {
               <StatItem
                 key="products"
                 value={formatNumber(stats.articulos)}
-                isLoading={loadingStats}
+                isLoading={loadingStats || loadingDatabases}
                 label={t("inventory.products")}
                 colors={colors}
               />
@@ -244,7 +245,7 @@ export default function HomeScreen() {
               <StatItem
                 key="categories"
                 value={formatNumber(stats.categorias)}
-                isLoading={loadingStats}
+                isLoading={loadingStats || loadingDatabases}
                 label={t("inventory.categories")}
                 colors={colors}
               />
@@ -255,7 +256,7 @@ export default function HomeScreen() {
               <StatItem
                 key="warehouses"
                 value={formatNumber(stats.almacenes)}
-                isLoading={loadingStats}
+                isLoading={loadingStats || loadingDatabases}
                 label={t("inventory.warehouses")}
                 colors={colors}
               />
@@ -272,61 +273,98 @@ export default function HomeScreen() {
               { backgroundColor: colors.surface, borderColor: colors.border },
             ]}
           >
-            <InfoRow
-              icon="person-outline"
-              label={t("home.user")}
-              value={
-                user
-                  ? `${user.NOMBRE} ${user.APELLIDO_PATERNO || ""} ${user.APELLIDO_MATERNO || ""}`.trim()
-                  : "Usuario"
-              }
-              colors={colors}
-            />
-            <View
-              style={[styles.rowDivider, { backgroundColor: colors.border }]}
-            />
-            <InfoRow
-              icon="at-outline"
-              label="Username"
-              value={user?.USERNAME || "N/A"}
-              colors={colors}
-            />
-            <View
-              style={[styles.rowDivider, { backgroundColor: colors.border }]}
-            />
-            <InfoRow
-              icon="mail-outline"
-              label="Email"
-              value={user?.EMAIL || "Sin correo"}
-              colors={colors}
-            />
-            <View
-              style={[styles.rowDivider, { backgroundColor: colors.border }]}
-            />
-            <InfoRow
-              icon="call-outline"
-              label="Teléfono"
-              value={user?.TELEFONO || "Sin teléfono"}
-              colors={colors}
-            />
-            <View
-              style={[styles.rowDivider, { backgroundColor: colors.border }]}
-            />
-            <InfoRow
-              icon="business-outline"
-              label={t("home.company")}
-              value={companyCode?.toUpperCase() || "EMPRESA"}
-              colors={colors}
-            />
-            <View
-              style={[styles.rowDivider, { backgroundColor: colors.border }]}
-            />
-            <InfoRow
-              icon="shield-checkmark-outline"
-              label={t("home.role")}
-              value={t("home.administrator")}
-              colors={colors}
-            />
+            {loadingDatabases ? (
+              <View style={{ padding: 16, gap: 16 }}>
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <View
+                    key={i}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 12,
+                    }}
+                  >
+                    <Bone width={16} height={16} radius={4} />
+                    <Bone width={70} height={12} radius={4} />
+                    <View style={{ flex: 1 }} />
+                    <Bone width={100} height={13} radius={4} />
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <>
+                <InfoRow
+                  icon="person-outline"
+                  label={t("home.user")}
+                  value={
+                    user
+                      ? `${user.NOMBRE} ${user.APELLIDO_PATERNO || ""} ${user.APELLIDO_MATERNO || ""}`.trim()
+                      : "Usuario"
+                  }
+                  colors={colors}
+                />
+                <View
+                  style={[
+                    styles.rowDivider,
+                    { backgroundColor: colors.border },
+                  ]}
+                />
+                <InfoRow
+                  icon="at-outline"
+                  label="Username"
+                  value={user?.USERNAME || "N/A"}
+                  colors={colors}
+                />
+                <View
+                  style={[
+                    styles.rowDivider,
+                    { backgroundColor: colors.border },
+                  ]}
+                />
+                <InfoRow
+                  icon="mail-outline"
+                  label="Email"
+                  value={user?.EMAIL || "Sin correo"}
+                  colors={colors}
+                />
+                <View
+                  style={[
+                    styles.rowDivider,
+                    { backgroundColor: colors.border },
+                  ]}
+                />
+                <InfoRow
+                  icon="call-outline"
+                  label="Teléfono"
+                  value={user?.TELEFONO || "Sin teléfono"}
+                  colors={colors}
+                />
+                <View
+                  style={[
+                    styles.rowDivider,
+                    { backgroundColor: colors.border },
+                  ]}
+                />
+                <InfoRow
+                  icon="business-outline"
+                  label={t("home.company")}
+                  value={companyCode?.toUpperCase() || "EMPRESA"}
+                  colors={colors}
+                />
+                <View
+                  style={[
+                    styles.rowDivider,
+                    { backgroundColor: colors.border },
+                  ]}
+                />
+                <InfoRow
+                  icon="shield-checkmark-outline"
+                  label={t("home.role")}
+                  value={t("home.administrator")}
+                  colors={colors}
+                />
+              </>
+            )}
           </View>
         </Animated.View>
       </ScrollView>
@@ -472,52 +510,6 @@ export default function HomeScreen() {
   );
 }
 
-function AnimatedPulse({ colors }: { colors: any }) {
-  const pulseAnim = useRef(new Animated.Value(0.6)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 0.6,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-      ]),
-    ).start();
-  }, []);
-
-  return (
-    <Animated.View
-      style={{
-        opacity: pulseAnim,
-        transform: [{ scale: pulseAnim }],
-        flexDirection: "row",
-        gap: 3,
-        alignItems: "center",
-        height: 24,
-      }}
-    >
-      {[0, 1, 2].map((i) => (
-        <View
-          key={i}
-          style={{
-            width: 5,
-            height: 5,
-            borderRadius: 2.5,
-            backgroundColor: colors.textTertiary,
-          }}
-        />
-      ))}
-    </Animated.View>
-  );
-}
-
 function StatItem({
   value,
   label,
@@ -532,7 +524,7 @@ function StatItem({
   return (
     <View style={styles.statItem}>
       {isLoading ? (
-        <AnimatedPulse colors={colors} />
+        <Bone width={48} height={20} radius={6} />
       ) : (
         <Text style={[styles.statValue, { color: colors.text }]}>{value}</Text>
       )}

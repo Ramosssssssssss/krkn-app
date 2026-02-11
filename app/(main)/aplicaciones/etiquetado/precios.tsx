@@ -1,4 +1,5 @@
 import BluetoothModal, { BluetoothModalRef } from "@/components/BluetoothModal";
+import { Bone } from "@/components/Skeleton";
 import ArticleSearchBar, {
     SearchResult,
 } from "@/components/etiquetado/ArticleSearchBar";
@@ -14,6 +15,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+    Dimensions,
     Image,
     Modal,
     ScrollView,
@@ -27,6 +29,10 @@ import {
     GestureHandlerRootView,
     Swipeable,
 } from "react-native-gesture-handler";
+
+const { width } = Dimensions.get("window");
+const GRID_GAP = 12;
+const CARD_SIZE = (width - 32 - GRID_GAP) / 2;
 
 interface ApiPriceProduct {
   codigo: string;
@@ -131,15 +137,21 @@ export default function EtiquetasPreciosScreen() {
   }, [codigo, selectedAlmacen]);
 
   const loadSavedData = async () => {
-    const [savedPrinter, savedConfig, savedAlm, savedSuc, savedTemplates, savedSize] =
-      await Promise.all([
-        AsyncStorage.getItem("last_printer"),
-        AsyncStorage.getItem("price_label_config"),
-        AsyncStorage.getItem("preferred_almacen"),
-        AsyncStorage.getItem("preferred_sucursal"),
-        AsyncStorage.getItem("price_label_templates"),
-        AsyncStorage.getItem("price_label_size"),
-      ]);
+    const [
+      savedPrinter,
+      savedConfig,
+      savedAlm,
+      savedSuc,
+      savedTemplates,
+      savedSize,
+    ] = await Promise.all([
+      AsyncStorage.getItem("last_printer"),
+      AsyncStorage.getItem("price_label_config"),
+      AsyncStorage.getItem("preferred_almacen"),
+      AsyncStorage.getItem("preferred_sucursal"),
+      AsyncStorage.getItem("price_label_templates"),
+      AsyncStorage.getItem("price_label_size"),
+    ]);
     if (savedPrinter) setConnectedPrinter(JSON.parse(savedPrinter));
     if (savedConfig) setLabelConfig(JSON.parse(savedConfig));
     if (savedAlm) setSelectedAlmacen(Number(savedAlm));
@@ -400,7 +412,8 @@ export default function EtiquetasPreciosScreen() {
       });
 
       // ZPL recalibrated: Added QR Code in the middle
-      const labelWidth = LABEL_SIZES.find(s => s.id === selectedSize)?.width || 800;
+      const labelWidth =
+        LABEL_SIZES.find((s) => s.id === selectedSize)?.width || 800;
       const zpl = `^XA
 ^CI28
 ^PW${labelWidth}
@@ -440,7 +453,8 @@ export default function EtiquetasPreciosScreen() {
         day: "2-digit",
       });
 
-      const labelWidth = LABEL_SIZES.find(s => s.id === selectedSize)?.width || 800;
+      const labelWidth =
+        LABEL_SIZES.find((s) => s.id === selectedSize)?.width || 800;
 
       for (const product of productList) {
         const zpl = `^XA
@@ -538,80 +552,248 @@ export default function EtiquetasPreciosScreen() {
         />
 
         {isLoadingProduct && !selectedProduct && !isListMode ? (
-          <View
-            style={[
-              styles.loadingCard,
-              { backgroundColor: colors.surface, borderColor: colors.border },
-            ]}
-          >
-            <ActivityIndicator size="large" color={colors.accent} />
-            <Text style={[styles.loadingText, { color: colors.text }]}>
-              Generando preview del producto...
-            </Text>
+          /* ─── Skeleton Loading ─── */
+          <View style={{ marginTop: 16 }}>
+            {/* Article header skeleton */}
+            <View
+              style={[
+                styles.articleHeader,
+                { backgroundColor: colors.surface },
+              ]}
+            >
+              <Bone width={42} height={42} radius={12} />
+              <View style={{ flex: 1, gap: 6 }}>
+                <Bone width={100} height={10} radius={3} />
+                <Bone width={180} height={14} radius={4} />
+              </View>
+            </View>
+            {/* 2x2 Grid skeleton */}
+            <View style={styles.priceGrid}>
+              {[0, 1, 2, 3].map((i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.priceCard,
+                    { backgroundColor: colors.surface },
+                  ]}
+                >
+                  <Bone width={80} height={10} radius={3} />
+                  <Bone width={100} height={28} radius={5} />
+                  <Bone width={60} height={8} radius={3} />
+                </View>
+              ))}
+            </View>
+            {/* Label preview skeleton */}
+            <View
+              style={[
+                styles.labelPreviewCard,
+                { backgroundColor: colors.surface },
+              ]}
+            >
+              <Bone width={120} height={10} radius={3} />
+              <Bone width={"100%"} height={120} radius={10} />
+            </View>
           </View>
         ) : selectedProduct && !isListMode ? (
-          <View style={styles.previewContainer}>
-            <View style={[styles.labelPreview, { backgroundColor: "#fff" }]}>
-              {/* TITLE */}
-              <Text style={styles.labelTitle} numberOfLines={2}>
-                {selectedProduct.descripcion}
+          <View style={{ marginTop: 16 }}>
+            {/* ─── Article Header ─── */}
+            <View
+              style={[
+                styles.articleHeader,
+                { backgroundColor: colors.surface },
+              ]}
+            >
+              <View
+                style={[
+                  styles.articleIcon,
+                  { backgroundColor: `${colors.accent}12` },
+                ]}
+              >
+                <Ionicons name="pricetag" size={20} color={colors.accent} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.articleSku, { color: colors.accent }]}>
+                  {selectedProduct.codigo}
+                </Text>
+                <Text
+                  style={[styles.articleName, { color: colors.text }]}
+                  numberOfLines={2}
+                >
+                  {selectedProduct.descripcion}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setSelectedProduct(null)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons
+                  name="close-circle"
+                  size={22}
+                  color={colors.textTertiary}
+                />
+              </TouchableOpacity>
+            </View>
+
+            {/* ─── 2x2 Price Grid ─── */}
+            <View style={styles.priceGrid}>
+              {/* Precio Lista */}
+              <View
+                style={[styles.priceCard, { backgroundColor: colors.surface }]}
+              >
+                <Text
+                  style={[
+                    styles.priceCardLabel,
+                    { color: colors.textTertiary },
+                  ]}
+                >
+                  PRECIO LISTA
+                </Text>
+                <Text
+                  style={[styles.priceCardValue, { color: colors.success }]}
+                  adjustsFontSizeToFit
+                  numberOfLines={1}
+                >
+                  ${selectedProduct.precio_lista_iva.toFixed(2)}
+                </Text>
+                <Text
+                  style={[styles.priceCardSub, { color: colors.textTertiary }]}
+                >
+                  con IVA
+                </Text>
+              </View>
+              {/* Precio Dist */}
+              <View
+                style={[styles.priceCard, { backgroundColor: colors.surface }]}
+              >
+                <Text
+                  style={[
+                    styles.priceCardLabel,
+                    { color: colors.textTertiary },
+                  ]}
+                >
+                  DISTRIBUIDOR
+                </Text>
+                <Text
+                  style={[styles.priceCardValue, { color: colors.accent }]}
+                  adjustsFontSizeToFit
+                  numberOfLines={1}
+                >
+                  ${selectedProduct.precio_mayor_iva.toFixed(2)}
+                </Text>
+                <Text
+                  style={[styles.priceCardSub, { color: colors.textTertiary }]}
+                >
+                  mayoreo
+                </Text>
+              </View>
+              {/* Unidad */}
+              <View
+                style={[styles.priceCard, { backgroundColor: colors.surface }]}
+              >
+                <Text
+                  style={[
+                    styles.priceCardLabel,
+                    { color: colors.textTertiary },
+                  ]}
+                >
+                  UNIDAD
+                </Text>
+                <Text style={[styles.priceCardValueMd, { color: colors.text }]}>
+                  {selectedProduct.unidad_venta}
+                </Text>
+                <Text
+                  style={[styles.priceCardSub, { color: colors.textTertiary }]}
+                >
+                  de venta
+                </Text>
+              </View>
+              {/* Estatus */}
+              <View
+                style={[styles.priceCard, { backgroundColor: colors.surface }]}
+              >
+                <Text
+                  style={[
+                    styles.priceCardLabel,
+                    { color: colors.textTertiary },
+                  ]}
+                >
+                  ESTATUS
+                </Text>
+                <Text style={[styles.priceCardValueMd, { color: colors.text }]}>
+                  {selectedProduct.estatus || "G-68"}
+                </Text>
+                <Text
+                  style={[styles.priceCardSub, { color: colors.textTertiary }]}
+                >
+                  clasificación
+                </Text>
+              </View>
+            </View>
+
+            {/* ─── Label Preview ─── */}
+            <View
+              style={[
+                styles.labelPreviewCard,
+                { backgroundColor: colors.surface },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.labelPreviewTitle,
+                  { color: colors.textTertiary },
+                ]}
+              >
+                VISTA PREVIA ETIQUETA
               </Text>
-
-              <View style={styles.labelMainSection}>
-                {/* LEFT DATA */}
-                <View style={styles.labelColumnLeft}>
-                  <View>
+              <View style={[styles.labelPreview, { backgroundColor: "#fff" }]}>
+                <Text style={styles.labelTitle} numberOfLines={2}>
+                  {selectedProduct.descripcion}
+                </Text>
+                <View style={styles.labelMainSection}>
+                  <View style={styles.labelColumnLeft}>
+                    <View>
+                      <Text style={styles.labelHeavyText}>
+                        {selectedProduct.estatus || "G-68"}
+                      </Text>
+                      <Text style={styles.labelHeavyText}>A</Text>
+                      <Text style={styles.labelHeavyText}>
+                        {selectedProduct.unidad_venta}
+                      </Text>
+                    </View>
                     <Text style={styles.labelHeavyText}>
-                      {selectedProduct.estatus || "G-68"}
-                    </Text>
-                    <Text style={styles.labelHeavyText}>A</Text>
-                    <Text style={styles.labelHeavyText}>
-                      {selectedProduct.unidad_venta}
+                      {selectedProduct.codigo}
                     </Text>
                   </View>
-                  <Text style={styles.labelHeavyText}>
-                    {selectedProduct.codigo}
-                  </Text>
-                </View>
-
-                {/* QR CENTER */}
-                <View style={styles.labelColumnCenter}>
-                  <Image
-                    source={{
-                      uri: `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${selectedProduct.codigo}`,
-                    }}
-                    style={styles.qrImage}
-                  />
-                </View>
-
-                {/* RIGHT DATA */}
-                <View style={styles.labelColumnRight}>
-                  <View style={{ alignItems: "flex-end" }}>
-                    <Text style={styles.labelDateSmall}>
-                      {new Date().toLocaleDateString("es-MX")}
-                    </Text>
-                    <Text
-                      style={styles.labelPriceBig}
-                      adjustsFontSizeToFit
-                      numberOfLines={1}
-                    >
-                      ${selectedProduct.precio_lista_iva.toFixed(2)}
+                  <View style={styles.labelColumnCenter}>
+                    <Image
+                      source={{
+                        uri: `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${selectedProduct.codigo}`,
+                      }}
+                      style={styles.qrImage}
+                    />
+                  </View>
+                  <View style={styles.labelColumnRight}>
+                    <View style={{ alignItems: "flex-end" }}>
+                      <Text style={styles.labelDateSmall}>
+                        {new Date().toLocaleDateString("es-MX")}
+                      </Text>
+                      <Text
+                        style={styles.labelPriceBig}
+                        adjustsFontSizeToFit
+                        numberOfLines={1}
+                      >
+                        ${selectedProduct.precio_lista_iva.toFixed(2)}
+                      </Text>
+                    </View>
+                    <Text style={styles.labelDistSmall}>
+                      Dist: ${selectedProduct.precio_mayor_iva.toFixed(2)}
                     </Text>
                   </View>
-                  <Text style={styles.labelDistSmall}>
-                    Dist: ${selectedProduct.precio_mayor_iva.toFixed(2)}
-                  </Text>
                 </View>
               </View>
             </View>
 
-            <TouchableOpacity
-              style={styles.clearBtn}
-              onPress={() => setSelectedProduct(null)}
-            >
-              <Ionicons name="close-circle" size={24} color={colors.error} />
-            </TouchableOpacity>
-
+            {/* ─── Almacén + Cantidad ─── */}
             <TouchableOpacity
               style={[styles.settingsCard, { backgroundColor: colors.surface }]}
               onPress={() => setIsAlmacenModalVisible(true)}
@@ -635,6 +817,7 @@ export default function EtiquetasPreciosScreen() {
                 />
               </View>
             </TouchableOpacity>
+
             <View
               style={[styles.quantityCard, { backgroundColor: colors.surface }]}
             >
@@ -669,19 +852,21 @@ export default function EtiquetasPreciosScreen() {
             </View>
           </View>
         ) : !isListMode ? (
-          <View
-            style={[
-              styles.emptyCard,
-              { backgroundColor: colors.surface, borderColor: colors.border },
-            ]}
-          >
-            <Ionicons
-              name="pricetag-outline"
-              size={48}
-              color={colors.textTertiary}
-            />
-            <Text style={[styles.emptyText, { color: colors.textTertiary }]}>
-              Busca un artículo para generar su etiqueta de piso
+          <View style={styles.emptyWrap}>
+            <View
+              style={[styles.emptyCircle, { backgroundColor: colors.surface }]}
+            >
+              <Ionicons
+                name="pricetag-outline"
+                size={32}
+                color={colors.textTertiary}
+              />
+            </View>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>
+              Buscar artículo
+            </Text>
+            <Text style={[styles.emptyDesc, { color: colors.textTertiary }]}>
+              Escanea o busca un código para ver sus precios y generar etiquetas
             </Text>
           </View>
         ) : null}
@@ -1552,6 +1737,81 @@ function ConfigStepper({
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: 16, paddingBottom: 120 },
+  // Article Header
+  articleHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 14,
+    borderRadius: 14,
+    gap: 12,
+  },
+  articleIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  articleSku: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    marginBottom: 2,
+  },
+  articleName: {
+    fontSize: 14,
+    fontWeight: "600",
+    lineHeight: 18,
+  },
+  // 2x2 Grid
+  priceGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: GRID_GAP,
+    marginTop: 12,
+  },
+  priceCard: {
+    width: CARD_SIZE,
+    height: CARD_SIZE,
+    borderRadius: 16,
+    padding: 16,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 6,
+  },
+  priceCardLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  priceCardValue: {
+    fontSize: 28,
+    fontWeight: "800",
+    letterSpacing: -1,
+  },
+  priceCardValueMd: {
+    fontSize: 22,
+    fontWeight: "800",
+  },
+  priceCardSub: {
+    fontSize: 11,
+    fontWeight: "500",
+  },
+  // Label Preview Card
+  labelPreviewCard: {
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 12,
+    gap: 12,
+  },
+  labelPreviewTitle: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
   searchBar: {
     flexDirection: "row",
     alignItems: "center",
@@ -1561,27 +1821,22 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   searchInput: { flex: 1, fontSize: 16 },
-  previewContainer: { position: "relative", marginTop: 10 },
+  previewContainer: {},
   labelPreview: {
-    borderRadius: 8,
-    padding: 20,
+    borderRadius: 12,
+    padding: 16,
     width: "100%",
-    minHeight: 250,
+    minHeight: 180,
     borderWidth: 1,
     borderColor: "#eee",
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
   },
   labelTitle: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: "900",
     color: "#000",
-    marginBottom: 5,
+    marginBottom: 4,
   },
-  labelMainSection: { flexDirection: "row", flex: 1, marginTop: 5 },
+  labelMainSection: { flexDirection: "row", flex: 1, marginTop: 4 },
   labelColumnLeft: { flex: 0.8, justifyContent: "space-between" },
   labelColumnCenter: {
     flex: 1.2,
@@ -1594,19 +1849,19 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     justifyContent: "space-between",
   },
-  qrImage: { width: 85, height: 85 },
-  labelHeavyText: { fontSize: 18, fontWeight: "900", color: "#000" },
-  labelDateSmall: { fontSize: 14, fontWeight: "900", color: "#000" },
+  qrImage: { width: 70, height: 70 },
+  labelHeavyText: { fontSize: 14, fontWeight: "900", color: "#000" },
+  labelDateSmall: { fontSize: 11, fontWeight: "900", color: "#000" },
   labelPriceBig: {
-    fontSize: 62,
+    fontSize: 42,
     fontWeight: "900",
     color: "#000",
     letterSpacing: -2,
-    lineHeight: 68,
+    lineHeight: 46,
   },
-  labelDistSmall: { fontSize: 18, fontWeight: "900", color: "#000" },
-  clearBtn: { position: "absolute", top: -10, right: -10, zIndex: 1 },
-  settingsCard: { marginTop: 20, padding: 16, borderRadius: 12 },
+  labelDistSmall: { fontSize: 14, fontWeight: "900", color: "#000" },
+  clearBtn: {},
+  settingsCard: { marginTop: 12, padding: 16, borderRadius: 14 },
   settingsLabel: {
     fontSize: 10,
     fontWeight: "700",
@@ -1629,31 +1884,34 @@ const styles = StyleSheet.create({
   resultName: { fontSize: 14, fontWeight: "600" },
   resultSku: { fontSize: 12 },
   resultPrice: { fontSize: 16, fontWeight: "700" },
-  emptyCard: {
-    borderRadius: 20,
-    padding: 60,
+  emptyCard: {},
+  emptyText: {},
+  // Empty state
+  emptyWrap: {
     alignItems: "center",
-    borderWidth: 2,
-    borderStyle: "dashed",
-    gap: 15,
-    marginTop: 40,
-    opacity: 0.5,
+    paddingTop: 60,
+    paddingHorizontal: 40,
+    gap: 12,
   },
-  emptyText: { textAlign: "center", fontSize: 16 },
-  loadingCard: {
-    borderRadius: 20,
-    padding: 60,
+  emptyCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    justifyContent: "center",
     alignItems: "center",
-    borderWidth: 2,
-    borderStyle: "dashed",
-    gap: 20,
-    marginTop: 40,
+    marginBottom: 4,
   },
-  loadingText: {
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  emptyDesc: {
+    fontSize: 14,
     textAlign: "center",
-    fontSize: 16,
-    fontWeight: "600",
+    lineHeight: 20,
   },
+  loadingCard: {},
+  loadingText: {},
   // List Mode Styles
   listModeIndicator: {
     flexDirection: "row",

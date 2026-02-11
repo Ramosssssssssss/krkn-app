@@ -1,33 +1,40 @@
-import { useAuth } from '@/context/auth-context';
-import { router } from 'expo-router';
-import { useEffect } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { AnimatedSplash } from "@/components/AnimatedSplash";
+import { useAuth } from "@/context/auth-context";
+import { router } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { View } from "react-native";
 
 export default function Index() {
   const { isAuthenticated, companyCode, isLoading } = useAuth();
+  const [splashDone, setSplashDone] = useState(false);
+  const hasNavigated = useRef(false);
 
+  const navigate = useCallback(() => {
+    if (hasNavigated.current) return;
+    hasNavigated.current = true;
+    if (isAuthenticated) {
+      router.replace("/(main)");
+    } else if (companyCode) {
+      router.replace("/(auth)/login");
+    } else {
+      router.replace("/(auth)/company-code");
+    }
+  }, [isAuthenticated, companyCode]);
+
+  // When both splash is done and auth is loaded, navigate
   useEffect(() => {
-    // Esperar a que se cargue la sesión guardada
-    if (isLoading) return;
+    if (splashDone && !isLoading) {
+      navigate();
+    }
+  }, [splashDone, isLoading, navigate]);
 
-    // Usar router.replace en vez de Redirect para mejor control
-    const timeout = setTimeout(() => {
-      if (isAuthenticated) {
-        router.replace('/(main)');
-      } else if (companyCode) {
-        router.replace('/(auth)/login');
-      } else {
-        router.replace('/(auth)/company-code');
-      }
-    }, 100);
+  const handleSplashFinish = useCallback(() => {
+    setSplashDone(true);
+  }, []);
 
-    return () => clearTimeout(timeout);
-  }, [isAuthenticated, companyCode, isLoading]);
-
-  // Mostrar loading mientras carga la sesión o redirige
   return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' }}>
-      <ActivityIndicator size="large" color="#fff" />
+    <View style={{ flex: 1, backgroundColor: "#000" }}>
+      <AnimatedSplash onFinish={handleSplashFinish} />
     </View>
   );
 }

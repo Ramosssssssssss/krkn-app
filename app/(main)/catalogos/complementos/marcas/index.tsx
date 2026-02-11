@@ -1,200 +1,269 @@
-import { useThemeColors } from '@/context/theme-context';
-import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import { Bone } from "@/components/Skeleton";
+import { useThemeColors } from "@/context/theme-context";
+import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
+import { router } from "expo-router";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-    FlatList,
-    Image,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-} from 'react-native';
+  Dimensions,
+  Image,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { MarcaDetailModal, NuevaMarcaModal } from './components';
-import { MARCAS_DATA, PRODUCTOS_EJEMPLO } from './data';
-import { Marca, NuevaMarcaData } from './types';
+import { MarcaDetailModal, NuevaMarcaModal } from "./components";
+import { MARCAS_DATA, PRODUCTOS_EJEMPLO } from "./data";
+import { Marca, NuevaMarcaData } from "./types";
+
+const { width } = Dimensions.get("window");
+const GRID_GAP = 12;
+const CARD_SIZE = (width - 32 - GRID_GAP) / 2;
+
+// Color basado en el nombre
+const getAvatarColor = (nombre: string) => {
+  const colorsArr = [
+    "#9D4EDD",
+    "#7C3AED",
+    "#6366F1",
+    "#3B82F6",
+    "#0EA5E9",
+    "#14B8A6",
+  ];
+  const index = nombre.charCodeAt(0) % colorsArr.length;
+  return colorsArr[index];
+};
+
+const getInitials = (nombre: string) => nombre.substring(0, 2).toUpperCase();
 
 export default function MarcasScreen() {
   const colors = useThemeColors();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isEditMode, setIsEditMode] = useState(false);
+  const insets = useSafeAreaInsets();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedMarca, setSelectedMarca] = useState<Marca | null>(null);
 
-  // Filtrar marcas
-  const { activas, archivadas } = useMemo(() => {
-    const filtered = MARCAS_DATA.filter(m =>
-      m.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      m.categorias.toLowerCase().includes(searchQuery.toLowerCase())
+  useEffect(() => {
+    const t = setTimeout(() => setLoading(false), 600);
+    return () => clearTimeout(t);
+  }, []);
+
+  const { activas } = useMemo(() => {
+    const filtered = MARCAS_DATA.filter(
+      (m) =>
+        m.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        m.categorias.toLowerCase().includes(searchQuery.toLowerCase()),
     );
     return {
-      activas: filtered.filter(m => m.activa),
-      archivadas: filtered.filter(m => !m.activa),
+      activas: filtered.filter((m) => m.activa),
+      archivadas: filtered.filter((m) => !m.activa),
     };
   }, [searchQuery]);
 
-  // Abrir detalle de marca
   const openMarcaDetail = (marca: Marca) => {
+    Haptics.selectionAsync();
     setSelectedMarca(marca);
     setShowDetailModal(true);
   };
 
-  // Guardar nueva marca
   const handleSaveNewMarca = (marcaData: NuevaMarcaData) => {
-    console.log('Nueva marca:', marcaData);
-    // TODO: Implementar guardado
+    console.log("Nueva marca:", marcaData);
   };
 
-  // Editar marca
   const handleEditMarca = (marca: Marca) => {
-    console.log('Editar marca:', marca);
-    // TODO: Implementar edición
+    console.log("Editar marca:", marca);
   };
 
-  // Agregar producto
   const handleAddProduct = () => {
-    console.log('Agregar producto a marca:', selectedMarca?.nombre);
-    // TODO: Implementar agregar producto
+    console.log("Agregar producto a marca:", selectedMarca?.nombre);
   };
 
-  // Obtener iniciales para el avatar
-  const getInitials = (nombre: string) => {
-    return nombre.substring(0, 2).toUpperCase();
+  const onRefresh = () => {
+    setRefreshing(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setTimeout(() => setRefreshing(false), 800);
   };
 
-  // Color basado en el nombre
-  const getAvatarColor = (nombre: string) => {
-    const colorsArr = ['#9D4EDD', '#7C3AED', '#6366F1', '#3B82F6', '#0EA5E9', '#14B8A6'];
-    const index = nombre.charCodeAt(0) % colorsArr.length;
-    return colorsArr[index];
-  };
-
-  const renderMarca = ({ item }: { item: Marca }) => (
-    <TouchableOpacity
-      style={[styles.marcaCard, { backgroundColor: colors.surface }]}
-      onPress={() => openMarcaDetail(item)}
-      activeOpacity={0.7}
-    >
-      <View style={[styles.marcaAvatar, { backgroundColor: getAvatarColor(item.nombre) + '20' }]}>
-        {item.logo ? (
-          <Image source={{ uri: item.logo }} style={styles.marcaLogo} />
-        ) : (
-          <Text style={[styles.marcaInitials, { color: getAvatarColor(item.nombre) }]}>
-            {getInitials(item.nombre)}
-          </Text>
-        )}
-      </View>
-      
-      <View style={styles.marcaInfo}>
-        <Text style={[styles.marcaNombre, { color: colors.text }]}>{item.nombre}</Text>
-        <Text style={[styles.marcaCategorias, { color: colors.textSecondary }]} numberOfLines={1}>
-          {item.categorias}
-        </Text>
-      </View>
-      
-      <View style={styles.marcaSkus}>
-        <Text style={[styles.skusCount, { color: colors.textSecondary }]}>{item.skus} SKUs</Text>
-        <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
-      </View>
-    </TouchableOpacity>
+  /* ─── Skeleton ─── */
+  const renderSkeleton = () => (
+    <View style={s.grid}>
+      {[0, 1, 2, 3, 4, 5].map((i) => (
+        <View key={i} style={[s.card, { backgroundColor: colors.surface }]}>
+          <Bone width={44} height={44} radius={12} />
+          <Bone width={CARD_SIZE * 0.65} height={12} radius={4} />
+          <Bone width={CARD_SIZE * 0.4} height={10} radius={3} />
+        </View>
+      ))}
+    </View>
   );
 
-  const renderSectionHeader = (title: string) => (
-    <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>{title}</Text>
+  /* ─── Empty ─── */
+  const renderEmpty = () => (
+    <View style={s.empty}>
+      <View style={[s.emptyCircle, { backgroundColor: colors.surface }]}>
+        <Ionicons
+          name="bookmark-outline"
+          size={32}
+          color={colors.textTertiary}
+        />
+      </View>
+      <Text style={[s.emptyTitle, { color: colors.text }]}>Sin marcas</Text>
+      <Text style={[s.emptyDesc, { color: colors.textTertiary }]}>
+        No se encontraron marcas con ese criterio
+      </Text>
+    </View>
+  );
+
+  /* ─── Grid ─── */
+  const renderGrid = () => (
+    <View style={s.grid}>
+      {activas.map((item) => {
+        const avatarColor = getAvatarColor(item.nombre);
+        return (
+          <TouchableOpacity
+            key={item.id}
+            style={[s.card, { backgroundColor: colors.surface }]}
+            activeOpacity={0.7}
+            onPress={() => openMarcaDetail(item)}
+          >
+            <View
+              style={[s.cardAvatar, { backgroundColor: `${avatarColor}20` }]}
+            >
+              {item.logo ? (
+                <Image source={{ uri: item.logo }} style={s.cardLogo} />
+              ) : (
+                <Text style={[s.cardInitials, { color: avatarColor }]}>
+                  {getInitials(item.nombre)}
+                </Text>
+              )}
+            </View>
+            <Text
+              style={[s.cardName, { color: colors.text }]}
+              numberOfLines={2}
+            >
+              {item.nombre}
+            </Text>
+            <View style={s.cardFooter}>
+              <Text style={[s.cardLabel, { color: avatarColor }]}>
+                {item.skus} SKUs
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={14}
+                color={colors.textTertiary}
+              />
+            </View>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[s.container, { backgroundColor: colors.background }]}>
       {/* Header */}
-      <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={24} color={colors.accent} />
-        </TouchableOpacity>
-        <View style={styles.headerCenter} />
-        <TouchableOpacity onPress={() => setIsEditMode(!isEditMode)}>
-          <Text style={[styles.editBtn, { color: colors.accent }]}>
-            {isEditMode ? 'Listo' : 'Editar'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Título */}
-      <View style={[styles.titleContainer, { backgroundColor: colors.surface }]}>
-        <Text style={[styles.title, { color: colors.text }]}>Marcas</Text>
-      </View>
-
-      {/* Búsqueda */}
-      <View style={[styles.searchContainer, { backgroundColor: colors.surface }]}>
-        <View style={[styles.searchBox, { backgroundColor: colors.background }]}>
-          <Ionicons name="search" size={18} color={colors.textTertiary} />
-          <TextInput
-            style={[styles.searchInput, { color: colors.text }]}
-            placeholder="Buscar"
-            placeholderTextColor={colors.textTertiary}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Ionicons name="close-circle" size={18} color={colors.textTertiary} />
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-
-      {/* Lista */}
-      <FlatList
-        data={[]}
-        renderItem={null}
-        ListHeaderComponent={
-          <>
-            {/* Activas */}
-            {activas.length > 0 && (
-              <>
-                {renderSectionHeader('ACTIVAS')}
-                <View style={[styles.listSection, { backgroundColor: colors.surface }]}>
-                  {activas.map((marca, index) => (
-                    <View key={marca.id}>
-                      {renderMarca({ item: marca })}
-                      {index < activas.length - 1 && (
-                        <View style={[styles.separator, { backgroundColor: colors.border }]} />
-                      )}
-                    </View>
-                  ))}
-                </View>
-              </>
-            )}
-
-  
-          </>
-        }
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-      />
-
-      {/* Botón Nueva Marca */}
-      <View style={[styles.footer, { backgroundColor: colors.background }]}>
+      <View style={[s.header, { paddingTop: insets.top }]}>
         <TouchableOpacity
-          style={[styles.addButton, { backgroundColor: colors.accent }]}
-          onPress={() => setShowAddModal(true)}
+          style={s.backBtn}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            router.back();
+          }}
         >
-          <Ionicons name="add-circle" size={20} color="#fff" />
-          <Text style={styles.addButtonText}>Nueva Marca</Text>
+          <Ionicons name="chevron-back" size={22} color={colors.accent} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onRefresh}>
+          <Ionicons
+            name="refresh-outline"
+            size={22}
+            color={colors.textTertiary}
+          />
         </TouchableOpacity>
       </View>
 
-      {/* Modal Nueva Marca */}
+      {/* Title */}
+      <Text style={[s.title, { color: colors.text }]}>Marcas</Text>
+
+      {/* Count */}
+      {!loading && (
+        <Text style={[s.countBadge, { color: colors.textTertiary }]}>
+          {activas.length} {activas.length === 1 ? "marca" : "marcas"}
+          {searchQuery ? " encontradas" : ""}
+        </Text>
+      )}
+
+      {/* Search */}
+      <View style={[s.searchBar, { backgroundColor: colors.inputBackground }]}>
+        <Ionicons name="search" size={16} color={colors.textTertiary} />
+        <TextInput
+          style={[s.searchInput, { color: colors.text }]}
+          placeholder="Buscar marcas..."
+          placeholderTextColor={colors.textTertiary}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery("")}>
+            <Ionicons
+              name="close-circle"
+              size={18}
+              color={colors.textTertiary}
+            />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Content */}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          s.scroll,
+          !loading && activas.length === 0 && { flex: 1 },
+        ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.accent}
+          />
+        }
+      >
+        {loading && !refreshing
+          ? renderSkeleton()
+          : activas.length === 0
+            ? renderEmpty()
+            : renderGrid()}
+      </ScrollView>
+
+      {/* FAB */}
+      <View style={[s.footer, { paddingBottom: insets.bottom + 16 }]}>
+        <TouchableOpacity
+          style={[s.fab, { backgroundColor: colors.accent }]}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            setShowAddModal(true);
+          }}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="add" size={20} color="#fff" />
+          <Text style={s.fabText}>Nueva Marca</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Modals */}
       <NuevaMarcaModal
         visible={showAddModal}
         onClose={() => setShowAddModal(false)}
         onSave={handleSaveNewMarca}
       />
-
-      {/* Modal Detalle de Marca */}
       <MarcaDetailModal
         visible={showDetailModal}
         marca={selectedMarca}
@@ -207,135 +276,128 @@ export default function MarcasScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+const s = StyleSheet.create({
+  container: { flex: 1 },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 60 : 48,
-    paddingBottom: 12,
-    borderBottomWidth: 0,
+    paddingBottom: 8,
   },
-  backBtn: {
-    width: 40,
-  },
-  headerCenter: {
-    flex: 1,
-  },
-  editBtn: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  titleContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-  },
+  backBtn: { padding: 4 },
   title: {
     fontSize: 32,
-    fontWeight: '700',
-  },
-  searchContainer: {
+    fontWeight: "700",
     paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingTop: 4,
+    paddingBottom: 4,
+    letterSpacing: -0.5,
   },
-  searchBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-    gap: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    padding: 0,
-  },
-  listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 100,
-  },
-  sectionTitle: {
+  countBadge: {
     fontSize: 13,
-    fontWeight: '600',
-    marginTop: 20,
-    marginBottom: 8,
-    marginLeft: 4,
-    letterSpacing: 0.5,
-  },
-  listSection: {
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  marcaCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
+    fontWeight: "500",
     paddingHorizontal: 16,
-    gap: 12,
+    paddingBottom: 12,
   },
-  marcaAvatar: {
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 16,
+    paddingHorizontal: 10,
+    height: 36,
+    borderRadius: 10,
+    marginBottom: 12,
+    gap: 6,
+  },
+  searchInput: { flex: 1, fontSize: 15 },
+  scroll: {
+    paddingHorizontal: 16,
+    paddingBottom: 110,
+  },
+  // ─── Grid ───
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: GRID_GAP,
+  },
+  card: {
+    width: CARD_SIZE,
+    height: CARD_SIZE,
+    borderRadius: 18,
+    padding: 16,
+    justifyContent: "space-between",
+  },
+  cardAvatar: {
     width: 44,
     height: 44,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  marcaLogo: {
+  cardLogo: {
     width: 32,
     height: 32,
     borderRadius: 6,
   },
-  marcaInitials: {
+  cardInitials: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
   },
-  marcaInfo: {
+  cardName: {
+    fontSize: 15,
+    fontWeight: "600",
+    lineHeight: 20,
+  },
+  cardFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  cardLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  // ─── Empty ───
+  empty: {
     flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 40,
+    gap: 10,
   },
-  marcaNombre: {
-    fontSize: 16,
-    fontWeight: '600',
+  emptyCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 4,
   },
-  marcaCategorias: {
-    fontSize: 13,
-    marginTop: 2,
-  },
-  marcaSkus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  skusCount: {
-    fontSize: 14,
-  },
-  separator: {
-    height: 1,
-    marginLeft: 72,
-  },
+  emptyTitle: { fontSize: 18, fontWeight: "700" },
+  emptyDesc: { fontSize: 14, textAlign: "center", lineHeight: 20 },
+  // ─── Footer ───
   footer: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    padding: 16,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 24,
+    paddingTop: 12,
+    paddingHorizontal: 16,
   },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    borderRadius: 12,
-    gap: 8,
+  fab: {
+    flexDirection: "row",
+    height: 50,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 6,
   },
-  addButtonText: {
-    color: '#fff',
+  fabText: {
+    color: "#fff",
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
 });

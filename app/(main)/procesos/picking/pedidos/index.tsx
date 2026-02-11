@@ -1,3 +1,4 @@
+import { SkeletonCardList } from "@/components/Skeleton";
 import { API_URL } from "@/config/api";
 import { useAuth } from "@/context/auth-context";
 import { useTheme, useThemeColors } from "@/context/theme-context";
@@ -8,7 +9,6 @@ import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-    ActivityIndicator,
     FlatList,
     Modal,
     RefreshControl,
@@ -17,7 +17,7 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    View
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -359,6 +359,38 @@ export default function PedidosiPhoneXPScreen() {
             </View>
           </View>
         }
+        ListEmptyComponent={
+          loading ? (
+            <SkeletonCardList count={4} />
+          ) : (
+            <View style={{ alignItems: "center", paddingTop: 60 }}>
+              <Ionicons
+                name="receipt-outline"
+                size={40}
+                color={colors.textTertiary}
+              />
+              <Text
+                style={{
+                  color: colors.text,
+                  fontSize: 17,
+                  fontWeight: "700",
+                  marginTop: 12,
+                }}
+              >
+                Sin pedidos
+              </Text>
+              <Text
+                style={{
+                  color: colors.textSecondary,
+                  fontSize: 13,
+                  marginTop: 4,
+                }}
+              >
+                No hay pedidos pendientes
+              </Text>
+            </View>
+          )
+        }
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -367,12 +399,6 @@ export default function PedidosiPhoneXPScreen() {
           />
         }
       />
-
-      {loading && !refreshing && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="small" color={colors.accent} />
-        </View>
-      )}
 
       {/* iOS Alert */}
       <Modal visible={alert.visible} transparent animationType="fade">

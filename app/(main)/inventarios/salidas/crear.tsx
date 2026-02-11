@@ -1,4 +1,6 @@
 import ArticleCard from "@/components/inventarios/ArticleCard";
+import MovimientoDraftModal from "@/components/inventarios/MovimientoDraftModal";
+import MovimientoExitModal from "@/components/inventarios/MovimientoExitModal";
 import ProductDetailModal from "@/components/inventarios/ProductDetailModal";
 import ProductSearchBar from "@/components/inventarios/ProductSearchBar";
 import ScanHeader from "@/components/inventarios/ScanHeader";
@@ -7,14 +9,16 @@ import SuccessModal from "@/components/inventarios/SuccessModal";
 import { useAuth } from "@/context/auth-context";
 import { useThemeColors } from "@/context/theme-context";
 import { useArticleScanner } from "@/hooks/use-article-scanner";
+import { useMovimientoDraft } from "@/hooks/use-movimiento-draft";
 import { useSucursalesAlmacenes } from "@/hooks/use-sucursales-almacenes";
 import {
     crearSalidaInventario,
     CrearSalidaResponse,
 } from "@/services/inventarios";
 import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
 import { router, Stack } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -46,7 +50,9 @@ export default function CrearSalidaScreen() {
     any | null
   >(null);
   const [showProductDetail, setShowProductDetail] = useState(false);
-
+  const [showExitModal, setShowExitModal] = useState(false);
+  const [showDraftModal, setShowDraftModal] = useState(false);
+  const draftRestored = useRef(false);
 
   const {
     sucursales,
@@ -84,6 +90,9 @@ export default function CrearSalidaScreen() {
     setDetalles,
   } = useArticleScanner();
 
+  const { pendingDraft, isLoadingDraft, saveDraft, clearDraft, dismissDraft } =
+    useMovimientoDraft("salida_draft");
+
   const sucursalNombre =
     sucursales.find((s) => s.id === selectedSucursal)?.nombre || "";
   const almacenNombre =
@@ -97,6 +106,60 @@ export default function CrearSalidaScreen() {
     }
   }, [selectedSucursal, selectedAlmacen]);
 
+  // — Draft: detectar borrador pendiente al montar
+  useEffect(() => {
+    if (!isLoadingDraft && pendingDraft && !draftRestored.current) {
+      setShowDraftModal(true);
+    }
+  }, [isLoadingDraft, pendingDraft]);
+
+  // — Draft: auto-guardar cada cambio
+  useEffect(() => {
+    if (draftRestored.current || detalles.length === 0) return;
+    saveDraft({
+      sucursalId: selectedSucursal,
+      almacenId: selectedAlmacen,
+      extra: {},
+      detalles,
+      savedAt: Date.now(),
+    });
+  }, [detalles, selectedSucursal, selectedAlmacen]);
+
+  const handleResumeDraft = useCallback(() => {
+    if (!pendingDraft) return;
+    draftRestored.current = true;
+    setShowDraftModal(false);
+    if (pendingDraft.sucursalId) setSelectedSucursal(pendingDraft.sucursalId);
+    if (pendingDraft.almacenId) setSelectedAlmacen(pendingDraft.almacenId);
+    setDetalles(pendingDraft.detalles);
+  }, [pendingDraft]);
+
+  const handleDiscardDraft = useCallback(() => {
+    dismissDraft();
+    setShowDraftModal(false);
+  }, []);
+
+  const handleExit = useCallback(() => {
+    if (detalles.length === 0) {
+      clearDraft();
+      router.back();
+      return;
+    }
+    setShowExitModal(true);
+  }, [detalles]);
+
+  const handleExitSaveDraft = useCallback(() => {
+    setShowExitModal(false);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    router.back();
+  }, []);
+
+  const handleExitDiscard = useCallback(() => {
+    setShowExitModal(false);
+    clearDraft();
+    clearArticles();
+    router.back();
+  }, []);
 
   const handleSave = () => {
     if (!selectedSucursal || !selectedAlmacen || detalles.length === 0) return;
@@ -156,6 +219,7 @@ export default function CrearSalidaScreen() {
 
   const handleSuccessClose = () => {
     setShowSuccessModal(false);
+    clearDraft();
     clearArticles();
     router.back();
   };
@@ -169,7 +233,7 @@ export default function CrearSalidaScreen() {
   const totalUnidades = detalles.reduce((sum, d) => sum + d.cantidad, 0);
 
   // Loading State
-  if (isLoading) {
+  if (isLoading || isLoadingDraft) {
     return (
       <View
         style={[styles.centerContainer, { backgroundColor: colors.background }]}
@@ -236,11 +300,22 @@ export default function CrearSalidaScreen() {
   );
 
   return (
-    <GestureHandlerRootView style={[styles.container, { backgroundColor: colors.background }]}>
+    <GestureHandlerRootView
+      style={[styles.container, { backgroundColor: colors.background }]}
+    >
       <Stack.Screen
         options={{
+          headerLeft: () => (
+            <TouchableOpacity onPress={handleExit} style={{ paddingRight: 8 }}>
+              <Ionicons name="arrow-back" size={24} color={colors.text} />
+            </TouchableOpacity>
+          ),
           headerRight: () => (
-            <ScanHeader color={colors.accent} aggressiveScan={aggressiveScan} onToggleScan={setAggressiveScan} />
+            <ScanHeader
+              color={colors.accent}
+              aggressiveScan={aggressiveScan}
+              onToggleScan={setAggressiveScan}
+            />
           ),
         }}
       />
@@ -344,7 +419,7 @@ export default function CrearSalidaScreen() {
             styles.secondaryButton,
             { borderColor: colors.border },
           ]}
-          onPress={() => router.back()}
+          onPress={handleExit}
         >
           <Text style={[styles.secondaryButtonText, { color: colors.text }]}>
             Cancelar
@@ -706,6 +781,23 @@ export default function CrearSalidaScreen() {
         color={colors.accent}
         onSelect={selectFromResults}
         onDismiss={dismissResults}
+      />
+
+      <MovimientoDraftModal
+        visible={showDraftModal}
+        draft={pendingDraft}
+        title="Salida en curso"
+        onResume={handleResumeDraft}
+        onDiscard={handleDiscardDraft}
+      />
+
+      <MovimientoExitModal
+        visible={showExitModal}
+        totalArticulos={totalArticulos}
+        totalUnidades={totalUnidades}
+        onSaveDraft={handleExitSaveDraft}
+        onDiscardExit={handleExitDiscard}
+        onCancel={() => setShowExitModal(false)}
       />
     </GestureHandlerRootView>
   );

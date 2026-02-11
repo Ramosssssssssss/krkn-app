@@ -1,4 +1,5 @@
 import { CameraScannerPicking } from "@/components/CameraScannerPicking";
+import { SkeletonDetailWithList } from "@/components/Skeleton";
 import { API_URL } from "@/config/api";
 import { useAssistive } from "@/context/assistive-context";
 import { useAuth } from "@/context/auth-context";
@@ -11,25 +12,25 @@ import { useCameraPermissions } from "expo-camera";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  FlatList,
-  Modal,
-  RefreshControl,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  Vibration,
-  View,
+    ActivityIndicator,
+    Alert,
+    Animated,
+    FlatList,
+    Modal,
+    RefreshControl,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    Vibration,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  ArticleCardPacking,
-  ArticleCardPackingHandle,
+    ArticleCardPacking,
+    ArticleCardPackingHandle,
 } from "../_components/ArticleCardPacking";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -796,20 +797,7 @@ export default function DetalleOrdenPackingScreen() {
   // ─── Loading ─────────────────────────────────────────────────────────────
 
   if (loading) {
-    return (
-      <View
-        style={[
-          styles.container,
-          styles.loadingContainer,
-          { backgroundColor: colors.background },
-        ]}
-      >
-        <ActivityIndicator size="large" color={sistemaColor} />
-        <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-          Cargando orden...
-        </Text>
-      </View>
-    );
+    return <SkeletonDetailWithList />;
   }
 
   // ─── Waiting for Box Scan ───────────────────────────────────────────────

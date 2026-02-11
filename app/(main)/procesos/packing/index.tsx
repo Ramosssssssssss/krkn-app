@@ -1,3 +1,4 @@
+import { SkeletonCardList } from "@/components/Skeleton";
 import { API_URL } from "@/config/api";
 import { useTheme, useThemeColors } from "@/context/theme-context";
 import { getCurrentDatabaseId } from "@/services/api";
@@ -7,16 +8,15 @@ import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  FlatList,
-  Modal,
-  RefreshControl,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    FlatList,
+    Modal,
+    RefreshControl,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -325,7 +325,9 @@ export default function PackingScreen() {
           </View>
         }
         ListEmptyComponent={
-          !loading ? (
+          loading ? (
+            <SkeletonCardList count={4} />
+          ) : (
             <View style={styles.emptyContainer}>
               <View
                 style={[
@@ -350,7 +352,7 @@ export default function PackingScreen() {
                 No hay órdenes pendientes de packing
               </Text>
             </View>
-          ) : null
+          )
         }
         refreshControl={
           <RefreshControl
@@ -360,12 +362,6 @@ export default function PackingScreen() {
           />
         }
       />
-
-      {loading && !refreshing && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#10B981" />
-        </View>
-      )}
 
       {/* iOS Alert */}
       <Modal visible={alert.visible} transparent animationType="fade">

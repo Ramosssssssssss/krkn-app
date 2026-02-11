@@ -1,3 +1,4 @@
+import { SkeletonInventoryList } from "@/components/Skeleton";
 import { useAuth } from "@/context/auth-context";
 import { useThemeColors } from "@/context/theme-context";
 import { getCurrentDatabaseId } from "@/services/api";
@@ -708,9 +709,7 @@ export default function AsignadosScreen() {
 
       {/* ── List ── */}
       {loading ? (
-        <View style={s.centerBox}>
-          <ActivityIndicator size="large" color={colors.textSecondary} />
-        </View>
+        <SkeletonInventoryList count={4} />
       ) : filteredInventarios.length === 0 ? (
         <View style={s.centerBox}>
           <View style={[s.emptyIcon, { backgroundColor: colors.surface }]}>

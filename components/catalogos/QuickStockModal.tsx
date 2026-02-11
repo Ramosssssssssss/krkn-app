@@ -1,10 +1,10 @@
+import { Bone } from "@/components/Skeleton";
 import { useThemeColors } from "@/context/theme-context";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
     Animated,
     Modal,
     ScrollView,
@@ -73,12 +73,10 @@ export default function QuickStockModal({
       const data = await response.json();
       if (data.ok) {
         let detalles = data.detalles || [];
-        // Si hay sucursalNombre, filtrar solo esa sucursal
         if (sucursalNombre) {
           const searchName = sucursalNombre.toLowerCase().trim();
           detalles = detalles.filter((d: any) => {
             const sucName = d.sucursal?.toLowerCase().trim() || "";
-            // Excluir CEDIS y buscar coincidencia
             if (sucName.includes("cedis")) return false;
             return sucName === searchName || sucName.includes(searchName);
           });
@@ -110,6 +108,9 @@ export default function QuickStockModal({
 
   if (!articulo) return null;
 
+  const formatStock = (n: number) =>
+    n % 1 === 0 ? n.toString() : n.toFixed(2);
+
   return (
     <Modal
       visible={visible}
@@ -118,8 +119,8 @@ export default function QuickStockModal({
       onRequestClose={handleClose}
       statusBarTranslucent
     >
-      <View style={styles.backdrop}>
-        <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
+      <View style={s.backdrop}>
+        <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
         <TouchableOpacity
           style={StyleSheet.absoluteFill}
           activeOpacity={1}
@@ -127,84 +128,70 @@ export default function QuickStockModal({
         />
         <Animated.View
           style={[
-            styles.container,
+            s.sheet,
             {
               backgroundColor: colors.background,
-              paddingBottom: insets.bottom + 20,
+              paddingBottom: insets.bottom + 16,
               transform: [{ translateY: slideAnim }],
             },
           ]}
         >
-          {/* Handle Bar */}
-          <View style={styles.handleBar}>
-            <View style={[styles.handle, { backgroundColor: colors.border }]} />
+          {/* Handle */}
+          <View style={s.handleWrap}>
+            <View style={[s.handle, { backgroundColor: colors.border }]} />
           </View>
 
           {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.headerLeft}>
-              <View
-                style={[
-                  styles.headerIcon,
-                  { backgroundColor: `${colors.accent}15` },
-                ]}
-              >
-                <Ionicons name="cube" size={20} color={colors.accent} />
-              </View>
-              <View style={styles.headerText}>
-                <Text style={[styles.title, { color: colors.text }]}>
-                  Existencias
-                </Text>
-                <Text
-                  style={[styles.subtitle, { color: colors.textTertiary }]}
-                  numberOfLines={1}
-                >
-                  {articulo.sku}
-                </Text>
-              </View>
-            </View>
+          <View style={s.header}>
+            <Text style={[s.headerTitle, { color: colors.text }]}>
+              Existencias
+            </Text>
             <TouchableOpacity
               onPress={handleClose}
-              style={[styles.closeBtn, { backgroundColor: colors.surface }]}
+              style={[s.closeBtn, { backgroundColor: colors.surface }]}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <Ionicons name="close" size={18} color={colors.textSecondary} />
+              <Ionicons name="close" size={16} color={colors.textTertiary} />
             </TouchableOpacity>
           </View>
 
-          {/* Total Summary Card */}
-          {!loading && existencias.length > 0 && (
-            <View
-              style={[styles.summaryCard, { backgroundColor: colors.surface }]}
+          {/* Article info pill */}
+          <View style={[s.articlePill, { backgroundColor: colors.surface }]}>
+            <Ionicons
+              name="pricetag-outline"
+              size={14}
+              color={colors.textTertiary}
+            />
+            <Text
+              style={[s.articleSku, { color: colors.textSecondary }]}
+              numberOfLines={1}
             >
-              <View style={styles.summaryRow}>
+              {articulo.sku}
+            </Text>
+            <Text style={{ color: colors.border }}>·</Text>
+            <Text
+              style={[s.articleName, { color: colors.text }]}
+              numberOfLines={1}
+            >
+              {articulo.nombre}
+            </Text>
+          </View>
+
+          {/* Total Summary */}
+          {!loading && existencias.length > 0 && (
+            <View style={[s.summaryCard, { backgroundColor: colors.surface }]}>
+              <Text style={[s.summaryLabel, { color: colors.textSecondary }]}>
+                Stock Total
+              </Text>
+              <View style={s.summaryRight}>
                 <Text
-                  style={[styles.summaryLabel, { color: colors.textSecondary }]}
+                  style={[s.summaryValue, { color: getStockColor(totalStock) }]}
                 >
-                  Stock Total Disponible
+                  {formatStock(totalStock)}
                 </Text>
-                <View
-                  style={[
-                    styles.totalBadge,
-                    { backgroundColor: `${getStockColor(totalStock)}15` },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.totalValue,
-                      { color: getStockColor(totalStock) },
-                    ]}
-                  >
-                    {totalStock % 1 === 0 ? totalStock : totalStock.toFixed(2)}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.totalUnit,
-                      { color: getStockColor(totalStock) },
-                    ]}
-                  >
-                    unidades
-                  </Text>
-                </View>
+                <Text style={[s.summaryUnit, { color: colors.textTertiary }]}>
+                  uds
+                </Text>
               </View>
             </View>
           )}
@@ -212,102 +199,112 @@ export default function QuickStockModal({
           {/* Content */}
           <ScrollView
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.content}
+            contentContainerStyle={s.scrollContent}
             bounces={true}
           >
             {loading ? (
-              <View style={styles.loadingContainer}>
+              <>
+                {/* Summary skeleton */}
                 <View
                   style={[
-                    styles.loadingBox,
-                    { backgroundColor: colors.surface },
+                    s.summaryCard,
+                    {
+                      backgroundColor: colors.surface,
+                      marginHorizontal: 0,
+                      marginBottom: 16,
+                    },
                   ]}
                 >
-                  <ActivityIndicator size="small" color={colors.accent} />
-                  <Text
-                    style={[styles.loadingText, { color: colors.textTertiary }]}
-                  >
-                    Consultando almacenes...
-                  </Text>
+                  <Bone width={80} height={13} radius={4} />
+                  <Bone width={56} height={24} radius={6} />
                 </View>
-              </View>
+                <View
+                  style={[s.groupedCard, { backgroundColor: colors.surface }]}
+                >
+                  {[0, 1, 2, 3].map((i) => (
+                    <View
+                      key={i}
+                      style={[
+                        s.row,
+                        { borderBottomColor: colors.border },
+                        i === 3 && { borderBottomWidth: 0 },
+                      ]}
+                    >
+                      <Bone width={32} height={32} radius={16} />
+                      <View style={{ flex: 1, marginLeft: 12, gap: 5 }}>
+                        <Bone width={70} height={10} radius={3} />
+                        <Bone width={110} height={14} radius={4} />
+                      </View>
+                      <Bone width={36} height={22} radius={6} />
+                    </View>
+                  ))}
+                </View>
+              </>
             ) : existencias.length > 0 ? (
-              <View style={styles.listContainer}>
-                {existencias.map((item, idx) => (
-                  <View
-                    key={idx}
-                    style={[
-                      styles.stockCard,
-                      { backgroundColor: colors.surface },
-                      idx === existencias.length - 1 && styles.lastCard,
-                    ]}
-                  >
-                    <View style={styles.stockCardContent}>
+              <View
+                style={[s.groupedCard, { backgroundColor: colors.surface }]}
+              >
+                {existencias.map((item, idx) => {
+                  const stockColor = getStockColor(item.stock);
+                  return (
+                    <View
+                      key={idx}
+                      style={[
+                        s.row,
+                        { borderBottomColor: colors.border },
+                        idx === existencias.length - 1 && {
+                          borderBottomWidth: 0,
+                        },
+                      ]}
+                    >
                       <View
                         style={[
-                          styles.stockIcon,
-                          { backgroundColor: `${getStockColor(item.stock)}12` },
+                          s.stockDot,
+                          { backgroundColor: `${stockColor}18` },
                         ]}
                       >
-                        <Ionicons
-                          name={
-                            item.stock > 0 ? "checkmark-circle" : "alert-circle"
-                          }
-                          size={18}
-                          color={getStockColor(item.stock)}
+                        <View
+                          style={[
+                            s.stockDotInner,
+                            { backgroundColor: stockColor },
+                          ]}
                         />
                       </View>
-                      <View style={styles.stockInfo}>
+                      <View style={s.stockInfo}>
                         <Text
                           style={[
-                            styles.stockSucursal,
+                            s.stockSucursal,
                             { color: colors.textTertiary },
                           ]}
                         >
                           {item.sucursal}
                         </Text>
-                        <Text
-                          style={[styles.stockAlmacen, { color: colors.text }]}
-                        >
+                        <Text style={[s.stockAlmacen, { color: colors.text }]}>
                           {item.almacen}
                         </Text>
                       </View>
-                      <View style={styles.stockValueContainer}>
-                        <Text
-                          style={[
-                            styles.stockValue,
-                            { color: getStockColor(item.stock) },
-                          ]}
-                        >
-                          {item.stock % 1 === 0
-                            ? item.stock
-                            : item.stock.toFixed(2)}
-                        </Text>
-                      </View>
+                      <Text style={[s.stockValue, { color: stockColor }]}>
+                        {formatStock(item.stock)}
+                      </Text>
                     </View>
-                  </View>
-                ))}
+                  );
+                })}
               </View>
             ) : (
-              <View style={styles.emptyContainer}>
+              <View style={s.emptyWrap}>
                 <View
-                  style={[
-                    styles.emptyIcon,
-                    { backgroundColor: colors.surface },
-                  ]}
+                  style={[s.emptyCircle, { backgroundColor: colors.surface }]}
                 >
                   <Ionicons
                     name="cube-outline"
-                    size={32}
+                    size={28}
                     color={colors.textTertiary}
                   />
                 </View>
-                <Text style={[styles.emptyTitle, { color: colors.text }]}>
+                <Text style={[s.emptyTitle, { color: colors.text }]}>
                   Sin existencias
                 </Text>
-                <Text
-                  style={[styles.emptyText, { color: colors.textTertiary }]}
-                >
+                <Text style={[s.emptyDesc, { color: colors.textTertiary }]}>
                   No hay stock registrado en ningún almacén
                 </Text>
               </View>
@@ -319,182 +316,105 @@ export default function QuickStockModal({
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    justifyContent: "flex-end",
-  },
-  container: {
+const s = StyleSheet.create({
+  backdrop: { flex: 1, justifyContent: "flex-end" },
+  sheet: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: "75%",
+    maxHeight: "70%",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 20,
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 24,
   },
-  handleBar: {
-    alignItems: "center",
-    paddingVertical: 12,
-  },
-  handle: {
-    width: 36,
-    height: 5,
-    borderRadius: 3,
-  },
+  handleWrap: { alignItems: "center", paddingTop: 10, paddingBottom: 6 },
+  handle: { width: 36, height: 4, borderRadius: 2 },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingBottom: 12,
   },
-  headerLeft: {
+  headerTitle: { fontSize: 18, fontWeight: "700", letterSpacing: -0.3 },
+  closeBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  articlePill: {
     flexDirection: "row",
     alignItems: "center",
-    flex: 1,
-  },
-  headerIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  headerText: {
-    flex: 1,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: "700",
-    letterSpacing: -0.4,
-  },
-  subtitle: {
-    fontSize: 13,
-    marginTop: 2,
-  },
-  closeBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  summaryCard: {
     marginHorizontal: 20,
-    borderRadius: 14,
-    padding: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    gap: 6,
     marginBottom: 16,
   },
-  summaryRow: {
+  articleSku: { fontSize: 12, fontWeight: "600" },
+  articleName: { fontSize: 12, fontWeight: "500", flex: 1 },
+
+  // Summary
+  summaryCard: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-  },
-  summaryLabel: {
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  totalBadge: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 10,
-    gap: 4,
-  },
-  totalValue: {
-    fontSize: 22,
-    fontWeight: "800",
-  },
-  totalUnit: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  content: {
-    paddingHorizontal: 20,
-    paddingBottom: 10,
-  },
-  loadingContainer: {
-    paddingVertical: 40,
-  },
-  loadingBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 16,
-    borderRadius: 12,
-    gap: 12,
-  },
-  loadingText: {
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  listContainer: {
-    gap: 8,
-  },
-  stockCard: {
+    marginHorizontal: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     borderRadius: 14,
-    overflow: "hidden",
+    marginBottom: 16,
   },
-  lastCard: {
-    marginBottom: 0,
-  },
-  stockCardContent: {
+  summaryLabel: { fontSize: 14, fontWeight: "500" },
+  summaryRight: { flexDirection: "row", alignItems: "baseline", gap: 4 },
+  summaryValue: { fontSize: 24, fontWeight: "800" },
+  summaryUnit: { fontSize: 12, fontWeight: "600" },
+
+  scrollContent: { paddingHorizontal: 20, paddingBottom: 8 },
+  groupedCard: { borderRadius: 14, overflow: "hidden" },
+  row: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  stockIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+
+  // Stock indicator
+  stockDot: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
   },
-  stockInfo: {
-    flex: 1,
-  },
+  stockDotInner: { width: 8, height: 8, borderRadius: 4 },
+  stockInfo: { flex: 1 },
   stockSucursal: {
     fontSize: 11,
     fontWeight: "600",
     textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 2,
+    letterSpacing: 0.4,
+    marginBottom: 1,
   },
-  stockAlmacen: {
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  stockValueContainer: {
-    alignItems: "flex-end",
-  },
-  stockValue: {
-    fontSize: 20,
-    fontWeight: "800",
-  },
-  emptyContainer: {
-    paddingVertical: 50,
-    alignItems: "center",
-  },
-  emptyIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
+  stockAlmacen: { fontSize: 15, fontWeight: "600" },
+  stockValue: { fontSize: 18, fontWeight: "800" },
+
+  // Empty
+  emptyWrap: { alignItems: "center", paddingVertical: 44 },
+  emptyCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 14,
   },
-  emptyTitle: {
-    fontSize: 17,
-    fontWeight: "600",
-    marginBottom: 6,
-  },
-  emptyText: {
-    fontSize: 14,
-    textAlign: "center",
-  },
+  emptyTitle: { fontSize: 16, fontWeight: "600", marginBottom: 4 },
+  emptyDesc: { fontSize: 13, textAlign: "center", lineHeight: 18 },
 });

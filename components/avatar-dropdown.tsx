@@ -1,18 +1,19 @@
+import { useDrawer } from "@/app/(main)/_layout";
 import { useAuth } from "@/context/auth-context";
 import { useTheme, useThemeColors } from "@/context/theme-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useMemo, useState } from "react";
 import {
-  Alert,
-  Image,
-  ImageSourcePropType,
-  Modal,
-  Platform,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    Alert,
+    Image,
+    ImageSourcePropType,
+    Modal,
+    Platform,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 // Avatares disponibles (mismo que en perfil.tsx)
@@ -26,10 +27,13 @@ const AVATARS: { id: string; source: ImageSourcePropType }[] = [
 ];
 
 export function AvatarDropdown() {
-  const { isDark, toggleTheme } = useTheme();
+  const { isDark } = useTheme();
   const colors = useThemeColors();
   const { user, logout } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
+
+  // Flash trigger from layout context (fullscreen overlay lives in MainLayout)
+  const { triggerThemeFlash } = useDrawer();
 
   // Determinar la fuente del avatar
   const avatarSource = useMemo(() => {
@@ -134,7 +138,7 @@ export function AvatarDropdown() {
 
       {/* Botón de Tema */}
       <TouchableOpacity
-        onPress={toggleTheme}
+        onPress={triggerThemeFlash}
         style={[
           styles.iconButton,
           { backgroundColor: colors.surface, borderColor: colors.border },
@@ -225,27 +229,26 @@ export function AvatarDropdown() {
 
 const styles = StyleSheet.create({
   iconButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 8,
+    marginRight: 6,
   },
   avatarButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     borderWidth: 1,
     justifyContent: "center",
     alignItems: "center",
     marginRight: Platform.OS === "ios" ? 0 : 8,
   },
   avatarImage: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
   },
   dropdownOverlay: {
     flex: 1,

@@ -1,12 +1,23 @@
 import { AvatarDropdown } from "@/components/avatar-dropdown";
+import { ScreenSaver } from "@/components/ScreenSaver";
 import { useAuth } from "@/context/auth-context";
 import { useLanguage } from "@/context/language-context";
 import { useTheme, useThemeColors } from "@/context/theme-context";
+import { useInactivityTimer } from "@/hooks/use-inactivity-timer";
 import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
 import { router, Stack, usePathname } from "expo-router";
-import React, { createContext, useContext, useState } from "react";
+import React, {
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useRef,
+    useState,
+} from "react";
 import {
     Dimensions,
+    PanResponder,
     Platform,
     ScrollView,
     StyleSheet,
@@ -15,15 +26,18 @@ import {
     View,
 } from "react-native";
 import Animated, {
+    Easing,
+    FadeIn,
     interpolate,
+    runOnJS,
     useAnimatedStyle,
     useSharedValue,
     withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const DRAWER_WIDTH = 280;
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+const DRAWER_WIDTH = 240;
 
 type MenuItemType = {
   name: string;
@@ -63,6 +77,7 @@ type DrawerContextType = {
   openDrawer: () => void;
   closeDrawer: () => void;
   toggleDrawer: () => void;
+  triggerThemeFlash: () => void;
 };
 
 const DrawerContext = createContext<DrawerContextType>({
@@ -70,17 +85,44 @@ const DrawerContext = createContext<DrawerContextType>({
   openDrawer: () => {},
   closeDrawer: () => {},
   toggleDrawer: () => {},
+  triggerThemeFlash: () => {},
 });
 
 export const useDrawer = () => useContext(DrawerContext);
 
-function DrawerContent({ onClose }: { onClose: () => void }) {
-  const { isDark, toggleTheme } = useTheme();
+function DrawerContent({
+  onClose,
+  isVisible,
+}: {
+  onClose: () => void;
+  isVisible: boolean;
+}) {
+  const [renderKey, setRenderKey] = useState(0);
+  useEffect(() => {
+    if (isVisible) setRenderKey((k) => k + 1);
+  }, [isVisible]);
+  const { isDark } = useTheme();
   const colors = useThemeColors();
-  const { companyCode, logout } = useAuth();
+  const { companyCode, user, logout } = useAuth();
   const { t } = useLanguage();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
+
+  // Saludo según hora del día
+  const getGreeting = () => {
+    const h = new Date().getHours();
+    if (h >= 5 && h < 12)
+      return { text: "Buenos días", icon: "sunny-outline" as const };
+    if (h >= 12 && h < 19)
+      return { text: "Buenas tardes", icon: "partly-sunny-outline" as const };
+    return { text: "Buenas noches", icon: "moon-outline" as const };
+  };
+  const greeting = getGreeting();
+  // Preferir USERNAME sobre NOMBRE (que puede ser el rol, ej: "ADMINISTRADOR")
+  const rawName = user?.USERNAME || user?.NOMBRE || "";
+  const firstName =
+    rawName.split(" ")[0].charAt(0).toUpperCase() +
+    rawName.split(" ")[0].slice(1).toLowerCase();
 
   const handleLogout = () => {
     logout();
@@ -117,32 +159,36 @@ function DrawerContent({ onClose }: { onClose: () => void }) {
           styles.drawerHeader,
           {
             borderBottomColor: colors.border,
-            paddingTop: Math.max(insets.top, 20) + 10, // Dinámicamente ajustado para el Notch/Status Bar
+            paddingTop: Math.max(insets.top, 20) + 10,
           },
         ]}
       >
-        <View
-          style={[
-            styles.logoContainer,
-            { backgroundColor: isDark ? "#FFFFFF" : "#000000" },
-          ]}
-        >
-          <Text
-            style={[styles.logoText, { color: isDark ? "#000000" : "#FFFFFF" }]}
-          >
-            K
-          </Text>
-        </View>
         <View style={styles.headerInfo}>
-          <Text style={[styles.brandName, { color: colors.text }]}>
-            KRKN WMS
+          <View style={styles.greetingRow}>
+            <Ionicons
+              name={greeting.icon}
+              size={18}
+              color={colors.accent}
+              style={{ marginRight: 6 }}
+            />
+            <Text
+              style={[styles.greetingText, { color: colors.textSecondary }]}
+            >
+              {greeting.text}
+            </Text>
+          </View>
+          <Text
+            style={[styles.brandName, { color: colors.text }]}
+            numberOfLines={1}
+          >
+            {firstName || "Usuario"}
           </Text>
-          <Text style={[styles.companyName, { color: colors.textSecondary }]}>
+          <Text style={[styles.companyTag, { color: colors.textTertiary }]}>
             {companyCode}.krkn.mx
           </Text>
         </View>
         <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-          <Ionicons name="close" size={24} color={colors.textSecondary} />
+          <Ionicons name="close" size={22} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
 
@@ -152,46 +198,60 @@ function DrawerContent({ onClose }: { onClose: () => void }) {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.menuSection}>
-          {menuItems.map((item) => {
+          {menuItems.map((item, index) => {
             const active = isActive(item.name);
             return (
-              <TouchableOpacity
-                key={item.name}
-                style={[
-                  styles.menuItem,
-                  active && {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.1)"
-                      : "rgba(0,0,0,0.05)",
-                  },
-                ]}
-                onPress={() => navigateTo(item.name)}
-                activeOpacity={0.7}
+              <Animated.View
+                key={`${item.name}-${renderKey}`}
+                entering={FadeIn.delay(80 + index * 40).duration(300)}
               >
-                <Ionicons
-                  name={item.icon}
-                  size={22}
-                  color={active ? colors.accent : colors.textSecondary}
-                  style={styles.menuIcon}
-                />
-                <Text
+                <TouchableOpacity
                   style={[
-                    styles.menuLabel,
-                    { color: active ? colors.text : colors.textSecondary },
-                    active && styles.menuLabelActive,
+                    styles.menuItem,
+                    active && {
+                      backgroundColor: isDark
+                        ? "rgba(255,255,255,0.08)"
+                        : "rgba(0,0,0,0.04)",
+                    },
                   ]}
+                  onPress={() => navigateTo(item.name)}
+                  activeOpacity={0.7}
                 >
-                  {t(item.labelKey)}
-                </Text>
-                {active && (
+                  {active && (
+                    <View
+                      style={[
+                        styles.activeBar,
+                        { backgroundColor: colors.accent },
+                      ]}
+                    />
+                  )}
                   <View
                     style={[
-                      styles.activeIndicator,
-                      { backgroundColor: colors.accent },
+                      styles.menuIconBox,
+                      active && { backgroundColor: `${colors.accent}18` },
                     ]}
-                  />
-                )}
-              </TouchableOpacity>
+                  >
+                    <Ionicons
+                      name={
+                        active
+                          ? (item.icon.replace("-outline", "") as any)
+                          : item.icon
+                      }
+                      size={20}
+                      color={active ? colors.accent : colors.textSecondary}
+                    />
+                  </View>
+                  <Text
+                    style={[
+                      styles.menuLabel,
+                      { color: active ? colors.text : colors.textSecondary },
+                      active && styles.menuLabelActive,
+                    ]}
+                  >
+                    {t(item.labelKey)}
+                  </Text>
+                </TouchableOpacity>
+              </Animated.View>
             );
           })}
         </View>
@@ -209,38 +269,60 @@ function DrawerContent({ onClose }: { onClose: () => void }) {
       >
         <View style={styles.footerButtonsRow}>
           <TouchableOpacity
-            style={[styles.circularButton, { backgroundColor: colors.surface }]}
+            style={styles.footerItem}
             onPress={() => {
               onClose();
               router.push("/(main)/configuracion/perfil");
             }}
           >
-            <Ionicons
-              name="person-outline"
-              size={20}
-              color={colors.textSecondary}
-            />
+            <View
+              style={[
+                styles.circularButton,
+                { backgroundColor: colors.surface },
+              ]}
+            >
+              <Ionicons
+                name="person-outline"
+                size={18}
+                color={colors.textSecondary}
+              />
+            </View>
+            <Text style={[styles.footerLabel, { color: colors.textTertiary }]}>
+              Perfil
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.circularButton, { backgroundColor: colors.surface }]}
+            style={styles.footerItem}
             onPress={() => {
               onClose();
               router.push("/(main)/configuracion");
             }}
           >
-            <Ionicons
-              name="settings-outline"
-              size={20}
-              color={colors.textSecondary}
-            />
+            <View
+              style={[
+                styles.circularButton,
+                { backgroundColor: colors.surface },
+              ]}
+            >
+              <Ionicons
+                name="settings-outline"
+                size={18}
+                color={colors.textSecondary}
+              />
+            </View>
+            <Text style={[styles.footerLabel, { color: colors.textTertiary }]}>
+              Ajustes
+            </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.circularButton, styles.logoutCircularButton]}
-            onPress={handleLogout}
-          >
-            <Ionicons name="log-out-outline" size={20} color="#FF453A" />
+          <TouchableOpacity style={styles.footerItem} onPress={handleLogout}>
+            <View style={[styles.circularButton, styles.logoutCircularButton]}>
+              <Ionicons name="log-out-outline" size={18} color="#FF453A" />
+            </View>
+            <Text style={[styles.footerLabel, { color: "#FF453A" }]}>
+              Salir
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -250,8 +332,69 @@ function DrawerContent({ onClose }: { onClose: () => void }) {
 
 export default function MainLayout() {
   const colors = useThemeColors();
+  const { isDark, toggleTheme } = useTheme();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const drawerProgress = useSharedValue(0);
+
+  // — Screensaver / Inactivity
+  const { isIdle, onActivity, dismiss } = useInactivityTimer(true);
+
+  // PanResponder to detect ANY touch on the whole screen
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponderCapture: () => {
+        onActivity();
+        return false; // don't steal touches
+      },
+      onMoveShouldSetPanResponderCapture: () => {
+        onActivity();
+        return false;
+      },
+    }),
+  ).current;
+
+  // — Circular reveal theme transition (Magic UI style)
+  const DIAGONAL = Math.sqrt(SCREEN_WIDTH ** 2 + SCREEN_HEIGHT ** 2);
+  const CIRCLE_SIZE = DIAGONAL * 2;
+  // Origin: theme toggle button position (top-right)
+  const ORIGIN_X = SCREEN_WIDTH - 75;
+  const ORIGIN_Y = Platform.OS === "ios" ? 58 : 32;
+
+  const revealProgress = useSharedValue(0);
+  const [revealColor, setRevealColor] = useState("#000");
+  const [showReveal, setShowReveal] = useState(false);
+  const themeToggled = useRef(false);
+
+  const revealStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: revealProgress.value }],
+    opacity: revealProgress.value > 0 ? 1 : 0,
+  }));
+
+  const triggerThemeFlash = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    themeToggled.current = false;
+    setRevealColor(isDark ? "#F5F5F7" : "#050208");
+    setShowReveal(true);
+    revealProgress.value = 0;
+
+    revealProgress.value = withTiming(
+      1,
+      { duration: 450, easing: Easing.out(Easing.quad) },
+      (finished) => {
+        if (finished) {
+          runOnJS(setShowReveal)(false);
+        }
+      },
+    );
+
+    // Toggle when circle covers the screen
+    setTimeout(() => {
+      if (!themeToggled.current) {
+        themeToggled.current = true;
+        toggleTheme();
+      }
+    }, 280);
+  }, [isDark, toggleTheme, revealProgress]);
 
   const openDrawer = () => {
     setIsDrawerOpen(true);
@@ -303,9 +446,18 @@ export default function MainLayout() {
 
   return (
     <DrawerContext.Provider
-      value={{ isOpen: isDrawerOpen, openDrawer, closeDrawer, toggleDrawer }}
+      value={{
+        isOpen: isDrawerOpen,
+        openDrawer,
+        closeDrawer,
+        toggleDrawer,
+        triggerThemeFlash,
+      }}
     >
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View
+        style={[styles.container, { backgroundColor: colors.background }]}
+        {...panResponder.panHandlers}
+      >
         {/* Main Screen */}
         <Animated.View style={[styles.screenContainer, screenAnimatedStyle]}>
           <Stack
@@ -315,22 +467,18 @@ export default function MainLayout() {
               },
               headerTintColor: colors.text,
               headerTitleStyle: {
-                fontWeight: "600",
-                fontSize: 18,
+                fontWeight: "700",
+                fontSize: 17,
+                letterSpacing: 0.2,
               },
               headerShadowVisible: false,
               headerLeft: () => (
                 <TouchableOpacity
                   onPress={toggleDrawer}
-                  style={[
-                    styles.menuButton,
-                    {
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                    },
-                  ]}
+                  style={styles.menuButton}
+                  activeOpacity={0.6}
                 >
-                  <Ionicons name="menu-outline" size={20} color={colors.text} />
+                  <Ionicons name="menu" size={22} color={colors.text} />
                 </TouchableOpacity>
               ),
               headerRight: () => <AvatarDropdown />,
@@ -377,9 +525,31 @@ export default function MainLayout() {
         {/* Drawer */}
         {isDrawerOpen && (
           <Animated.View style={[styles.drawer, drawerAnimatedStyle]}>
-            <DrawerContent onClose={closeDrawer} />
+            <DrawerContent onClose={closeDrawer} isVisible={isDrawerOpen} />
           </Animated.View>
         )}
+        {/* Circular reveal */}
+        {showReveal && (
+          <Animated.View
+            style={[
+              {
+                position: "absolute",
+                width: CIRCLE_SIZE,
+                height: CIRCLE_SIZE,
+                borderRadius: CIRCLE_SIZE / 2,
+                backgroundColor: revealColor,
+                left: ORIGIN_X - CIRCLE_SIZE / 2,
+                top: ORIGIN_Y - CIRCLE_SIZE / 2,
+                zIndex: 9999,
+              },
+              revealStyle,
+            ]}
+            pointerEvents="none"
+          />
+        )}
+
+        {/* Screensaver */}
+        <ScreenSaver visible={isIdle} onDismiss={dismiss} />
       </View>
     </DrawerContext.Provider>
   );
@@ -394,10 +564,9 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   menuButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -430,32 +599,31 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
     paddingHorizontal: 20,
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     borderBottomWidth: 1,
   },
-  logoContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    justifyContent: "center",
+  greetingRow: {
+    flexDirection: "row",
     alignItems: "center",
+    marginBottom: 2,
   },
-  logoText: {
-    fontSize: 24,
-    fontWeight: "700",
+  greetingText: {
+    fontSize: 13,
+    fontWeight: "500",
   },
   headerInfo: {
-    marginLeft: 14,
     flex: 1,
   },
   brandName: {
-    fontSize: 18,
-    fontWeight: "700",
-    letterSpacing: 1,
+    fontSize: 22,
+    fontWeight: "800",
+    letterSpacing: 0.3,
   },
-  companyName: {
-    fontSize: 13,
-    marginTop: 2,
+  companyTag: {
+    fontSize: 11,
+    marginTop: 4,
+    letterSpacing: 0.5,
+    opacity: 0.6,
   },
   closeButton: {
     padding: 4,
@@ -470,28 +638,39 @@ const styles = StyleSheet.create({
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
     borderRadius: 12,
-    marginBottom: 4,
+    marginBottom: 2,
     position: "relative",
+    overflow: "hidden",
+  },
+  activeBar: {
+    position: "absolute",
+    left: 0,
+    top: 8,
+    bottom: 8,
+    width: 3,
+    borderRadius: 2,
+  },
+  menuIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
   },
   menuIcon: {
     marginRight: 14,
   },
   menuLabel: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "500",
+    flex: 1,
   },
   menuLabelActive: {
-    fontWeight: "600",
-  },
-  activeIndicator: {
-    position: "absolute",
-    right: 12,
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    fontWeight: "700",
   },
   drawerFooter: {
     padding: 16,
@@ -501,12 +680,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    gap: 20,
+    gap: 28,
+  },
+  footerItem: {
+    alignItems: "center",
+    gap: 4,
+  },
+  footerLabel: {
+    fontSize: 10,
+    fontWeight: "600",
   },
   circularButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
   },

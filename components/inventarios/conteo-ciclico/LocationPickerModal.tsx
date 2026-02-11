@@ -5,13 +5,13 @@ import { useThemeColors } from "@/context/theme-context";
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import {
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 interface Props {
@@ -51,7 +51,9 @@ export default function LocationPickerModal({
         <View style={[st.content, { backgroundColor: colors.surface }]}>
           {/* Header */}
           <View style={[st.header, { borderBottomColor: colors.border }]}>
-            <Text style={[st.title, { color: colors.text }]}>Seleccionar ubicación</Text>
+            <Text style={[st.title, { color: colors.text }]}>
+              Seleccionar ubicación
+            </Text>
             {canClose && (
               <TouchableOpacity
                 style={[st.closeBtn, { backgroundColor: colors.accentLight }]}
@@ -64,7 +66,9 @@ export default function LocationPickerModal({
 
           <ScrollView style={st.body}>
             {/* Sucursales */}
-            <Text style={[st.label, { color: colors.textSecondary }]}>Sucursal</Text>
+            <Text style={[st.label, { color: colors.textSecondary }]}>
+              Sucursal
+            </Text>
             {sucursales.map((suc) => (
               <TouchableOpacity
                 key={suc.id}
@@ -72,7 +76,10 @@ export default function LocationPickerModal({
                   st.option,
                   {
                     backgroundColor: colors.background,
-                    borderColor: selectedSucursal === suc.id ? colors.accent : colors.border,
+                    borderColor:
+                      selectedSucursal === suc.id
+                        ? colors.accent
+                        : colors.border,
                   },
                   selectedSucursal === suc.id && { borderWidth: 2 },
                 ]}
@@ -81,18 +88,31 @@ export default function LocationPickerModal({
                 <Ionicons
                   name="business-outline"
                   size={20}
-                  color={selectedSucursal === suc.id ? colors.accent : colors.textSecondary}
+                  color={
+                    selectedSucursal === suc.id
+                      ? colors.accent
+                      : colors.textSecondary
+                  }
                 />
                 <Text
                   style={[
                     st.optionText,
-                    { color: selectedSucursal === suc.id ? colors.accent : colors.text },
+                    {
+                      color:
+                        selectedSucursal === suc.id
+                          ? colors.accent
+                          : colors.text,
+                    },
                   ]}
                 >
                   {suc.nombre}
                 </Text>
                 {selectedSucursal === suc.id && (
-                  <Ionicons name="checkmark-circle" size={20} color={colors.accent} />
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={20}
+                    color={colors.accent}
+                  />
                 )}
               </TouchableOpacity>
             ))}
@@ -100,7 +120,9 @@ export default function LocationPickerModal({
             {/* Almacenes */}
             {selectedSucursal != null && (
               <View style={st.almSection}>
-                <Text style={[st.label, { color: colors.textSecondary }]}>Almacén</Text>
+                <Text style={[st.label, { color: colors.textSecondary }]}>
+                  Almacén
+                </Text>
                 {almacenes.map((alm) => (
                   <TouchableOpacity
                     key={alm.id}
@@ -108,7 +130,10 @@ export default function LocationPickerModal({
                       st.option,
                       {
                         backgroundColor: colors.background,
-                        borderColor: selectedAlmacen === alm.id ? colors.accent : colors.border,
+                        borderColor:
+                          selectedAlmacen === alm.id
+                            ? colors.accent
+                            : colors.border,
                       },
                       selectedAlmacen === alm.id && { borderWidth: 2 },
                     ]}
@@ -117,18 +142,31 @@ export default function LocationPickerModal({
                     <Ionicons
                       name="cube-outline"
                       size={20}
-                      color={selectedAlmacen === alm.id ? colors.accent : colors.textSecondary}
+                      color={
+                        selectedAlmacen === alm.id
+                          ? colors.accent
+                          : colors.textSecondary
+                      }
                     />
                     <Text
                       style={[
                         st.optionText,
-                        { color: selectedAlmacen === alm.id ? colors.accent : colors.text },
+                        {
+                          color:
+                            selectedAlmacen === alm.id
+                              ? colors.accent
+                              : colors.text,
+                        },
                       ]}
                     >
                       {alm.nombre}
                     </Text>
                     {selectedAlmacen === alm.id && (
-                      <Ionicons name="checkmark-circle" size={20} color={colors.accent} />
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={20}
+                        color={colors.accent}
+                      />
                     )}
                   </TouchableOpacity>
                 ))}
@@ -155,8 +193,16 @@ export default function LocationPickerModal({
 }
 
 const st = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
-  content: { borderTopLeftRadius: 18, borderTopRightRadius: 18, maxHeight: "80%" },
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  content: {
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    maxHeight: "80%",
+  },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -165,9 +211,21 @@ const st = StyleSheet.create({
     borderBottomWidth: 1,
   },
   title: { fontSize: 16, fontWeight: "600" },
-  closeBtn: { width: 32, height: 32, borderRadius: 16, justifyContent: "center", alignItems: "center" },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   body: { padding: 16 },
-  label: { fontSize: 12, fontWeight: "600", marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 },
+  label: {
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: 8,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
   option: {
     flexDirection: "row",
     alignItems: "center",
@@ -179,7 +237,11 @@ const st = StyleSheet.create({
   },
   optionText: { flex: 1, fontSize: 14, fontWeight: "500" },
   almSection: { marginTop: 4 },
-  footer: { padding: 16, paddingBottom: Platform.OS === "ios" ? 28 : 20, borderTopWidth: 1 },
+  footer: {
+    padding: 16,
+    paddingBottom: Platform.OS === "ios" ? 28 : 20,
+    borderTopWidth: 1,
+  },
   confirmBtn: {
     flexDirection: "row",
     alignItems: "center",

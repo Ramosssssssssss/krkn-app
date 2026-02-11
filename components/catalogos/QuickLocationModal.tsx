@@ -1,4 +1,7 @@
+import { Bone } from "@/components/Skeleton";
+import { API_CONFIG } from "@/config/api";
 import { useThemeColors } from "@/context/theme-context";
+import { getCurrentDatabaseId } from "@/services/api";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
@@ -35,6 +38,8 @@ interface QuickLocationModalProps {
   sucursalNombre?: string;
 }
 
+const ACCENT = "#6366f1";
+
 export default function QuickLocationModal({
   visible,
   articulo,
@@ -70,13 +75,11 @@ export default function QuickLocationModal({
       setEditingIndex(null);
       setEditValue("");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, articulo]);
 
   const fetchLocations = async (articuloId: number) => {
     setLoading(true);
-    const { getCurrentDatabaseId } = require("@/services/api");
-    const { API_CONFIG } = require("@/config/api");
-
     const databaseId = getCurrentDatabaseId();
     const url = `${API_CONFIG.BASE_URL}/api/ubicaciones-articulo.php?databaseId=${databaseId}&articuloId=${articuloId}`;
 
@@ -85,12 +88,10 @@ export default function QuickLocationModal({
       const data = await response.json();
       if (data.ok) {
         let ubicacionesList = data.ubicaciones || [];
-        // Si hay sucursalNombre, filtrar solo esa sucursal/almacén
         if (sucursalNombre) {
           const searchName = sucursalNombre.toLowerCase().trim();
           ubicacionesList = ubicacionesList.filter((u: LocationInfo) => {
             const almName = u.almacen?.toLowerCase().trim() || "";
-            // Excluir CEDIS y buscar coincidencia
             if (almName.includes("cedis")) return false;
             return almName === searchName || almName.includes(searchName);
           });
@@ -129,9 +130,6 @@ export default function QuickLocationModal({
 
     setSaving(true);
     Keyboard.dismiss();
-
-    const { getCurrentDatabaseId } = require("@/services/api");
-    const { API_CONFIG } = require("@/config/api");
     const databaseId = getCurrentDatabaseId();
 
     try {
@@ -159,11 +157,8 @@ export default function QuickLocationModal({
         setEditingIndex(null);
         setEditValue("");
 
-        // Mostrar modal de éxito
         setShowSuccess(true);
-        setTimeout(() => {
-          setShowSuccess(false);
-        }, 1200);
+        setTimeout(() => setShowSuccess(false), 1200);
       } else {
         Alert.alert("Error", data.message || "No se pudo actualizar");
       }
@@ -188,7 +183,6 @@ export default function QuickLocationModal({
 
   return (
     <>
-      {/* Main Modal */}
       <Modal
         visible={visible}
         transparent
@@ -196,9 +190,9 @@ export default function QuickLocationModal({
         onRequestClose={handleClose}
         statusBarTranslucent
       >
-        <View style={styles.backdrop}>
+        <View style={s.backdrop}>
           <BlurView
-            intensity={20}
+            intensity={25}
             tint="dark"
             style={StyleSheet.absoluteFill}
           />
@@ -209,114 +203,120 @@ export default function QuickLocationModal({
           />
           <Animated.View
             style={[
-              styles.container,
+              s.sheet,
               {
                 backgroundColor: colors.background,
-                paddingBottom: insets.bottom + 20,
+                paddingBottom: insets.bottom + 16,
                 transform: [{ translateY: slideAnim }],
               },
             ]}
           >
-            <View style={styles.handleBar}>
-              <View
-                style={[styles.handle, { backgroundColor: colors.border }]}
-              />
+            {/* Handle */}
+            <View style={s.handleWrap}>
+              <View style={[s.handle, { backgroundColor: colors.border }]} />
             </View>
 
-            <View style={styles.header}>
-              <View style={styles.headerLeft}>
-                <View
-                  style={[styles.headerIcon, { backgroundColor: "#6366f115" }]}
-                >
-                  <Ionicons name="location" size={20} color="#6366f1" />
-                </View>
-                <View style={styles.headerText}>
-                  <Text style={[styles.title, { color: colors.text }]}>
-                    Ubicaciones
-                  </Text>
-                  <Text
-                    style={[styles.subtitle, { color: colors.textTertiary }]}
-                    numberOfLines={1}
-                  >
-                    {articulo.sku} · Toca para editar
-                  </Text>
-                </View>
-              </View>
+            {/* Header */}
+            <View style={s.header}>
+              <Text style={[s.headerTitle, { color: colors.text }]}>
+                Ubicaciones
+              </Text>
               <TouchableOpacity
                 onPress={handleClose}
-                style={[styles.closeBtn, { backgroundColor: colors.surface }]}
+                style={[s.closeBtn, { backgroundColor: colors.surface }]}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Ionicons name="close" size={18} color={colors.textSecondary} />
+                <Ionicons name="close" size={16} color={colors.textTertiary} />
               </TouchableOpacity>
             </View>
 
+            {/* Article info pill */}
+            <View style={[s.articlePill, { backgroundColor: colors.surface }]}>
+              <Ionicons
+                name="pricetag-outline"
+                size={14}
+                color={colors.textTertiary}
+              />
+              <Text
+                style={[s.articleSku, { color: colors.textSecondary }]}
+                numberOfLines={1}
+              >
+                {articulo.sku}
+              </Text>
+              <Text style={{ color: colors.border }}>·</Text>
+              <Text
+                style={[s.articleName, { color: colors.text }]}
+                numberOfLines={1}
+              >
+                {articulo.nombre}
+              </Text>
+            </View>
+
+            {/* Content */}
             <ScrollView
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.content}
+              contentContainerStyle={s.scrollContent}
               bounces={true}
               keyboardShouldPersistTaps="handled"
             >
               {loading ? (
-                <View style={styles.loadingContainer}>
-                  <View
-                    style={[
-                      styles.loadingBox,
-                      { backgroundColor: colors.surface },
-                    ]}
-                  >
-                    <ActivityIndicator size="small" color="#6366f1" />
-                    <Text
+                <View
+                  style={[s.groupedCard, { backgroundColor: colors.surface }]}
+                >
+                  {[0, 1, 2].map((i) => (
+                    <View
+                      key={i}
                       style={[
-                        styles.loadingText,
-                        { color: colors.textTertiary },
+                        s.row,
+                        { borderBottomColor: colors.border },
+                        i === 2 && { borderBottomWidth: 0 },
                       ]}
                     >
-                      Consultando ubicaciones...
-                    </Text>
-                  </View>
+                      <View style={s.locIconWrap}>
+                        <Bone width={36} height={36} radius={10} />
+                      </View>
+                      <View style={{ flex: 1, gap: 5 }}>
+                        <Bone width={90} height={10} radius={3} />
+                        <Bone width={120} height={16} radius={4} />
+                      </View>
+                      <Bone width={28} height={28} radius={8} />
+                    </View>
+                  ))}
                 </View>
               ) : ubicaciones.length > 0 ? (
-                <View style={styles.listContainer}>
+                <View
+                  style={[s.groupedCard, { backgroundColor: colors.surface }]}
+                >
                   {ubicaciones.map((item, idx) => (
                     <View
                       key={idx}
                       style={[
-                        styles.locationCard,
-                        { backgroundColor: colors.surface },
+                        { borderBottomColor: colors.border },
+                        idx < ubicaciones.length - 1 && {
+                          borderBottomWidth: StyleSheet.hairlineWidth,
+                        },
                       ]}
                     >
-                      <View style={styles.cardHeader}>
-                        <View
-                          style={[
-                            styles.almacenBadge,
-                            { backgroundColor: `${colors.accent}10` },
-                          ]}
-                        >
-                          <Ionicons
-                            name="business"
-                            size={14}
-                            color={colors.accent}
-                          />
-                          <Text
-                            style={[
-                              styles.almacenText,
-                              { color: colors.accent },
-                            ]}
-                          >
-                            {item.almacen}
-                          </Text>
-                        </View>
-                      </View>
-
                       {editingIndex === idx ? (
-                        <View style={styles.editContainer}>
+                        /* ─── Edit Mode ─── */
+                        <View style={s.editWrap}>
+                          <View style={s.editHeader}>
+                            <Text
+                              style={[
+                                s.editAlmacen,
+                                { color: colors.textTertiary },
+                              ]}
+                            >
+                              {item.almacen}
+                            </Text>
+                          </View>
                           <TextInput
                             style={[
-                              styles.editInput,
+                              s.editInput,
                               {
                                 backgroundColor: colors.background,
                                 color: colors.text,
-                                borderColor: "#6366f1",
+                                borderColor: ACCENT,
                               },
                             ]}
                             value={editValue}
@@ -327,18 +327,17 @@ export default function QuickLocationModal({
                             autoCapitalize="characters"
                             selectTextOnFocus
                           />
-                          <View style={styles.editActions}>
+                          <View style={s.editActions}>
                             <TouchableOpacity
                               style={[
-                                styles.editBtn,
-                                styles.cancelBtn,
-                                { borderColor: colors.border },
+                                s.editBtn,
+                                { borderColor: colors.border, borderWidth: 1 },
                               ]}
                               onPress={handleCancelEdit}
                             >
                               <Text
                                 style={[
-                                  styles.editBtnText,
+                                  s.editBtnText,
                                   { color: colors.textSecondary },
                                 ]}
                               >
@@ -346,11 +345,7 @@ export default function QuickLocationModal({
                               </Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                              style={[
-                                styles.editBtn,
-                                styles.saveBtn,
-                                { backgroundColor: "#6366f1" },
-                              ]}
+                              style={[s.editBtn, { backgroundColor: ACCENT }]}
                               onPress={() => handleSave(idx)}
                               disabled={saving}
                             >
@@ -358,10 +353,7 @@ export default function QuickLocationModal({
                                 <ActivityIndicator size="small" color="#fff" />
                               ) : (
                                 <Text
-                                  style={[
-                                    styles.editBtnText,
-                                    { color: "#fff" },
-                                  ]}
+                                  style={[s.editBtnText, { color: "#fff" }]}
                                 >
                                   Guardar
                                 </Text>
@@ -370,72 +362,70 @@ export default function QuickLocationModal({
                           </View>
                         </View>
                       ) : (
+                        /* ─── Display Mode ─── */
                         <TouchableOpacity
-                          style={styles.locationMain}
+                          style={s.row}
                           onPress={() => handleEdit(idx)}
-                          activeOpacity={0.7}
+                          activeOpacity={0.6}
                         >
                           <View
                             style={[
-                              styles.locationIconBox,
-                              { backgroundColor: "#6366f110" },
+                              s.locIconWrap,
+                              { backgroundColor: `${ACCENT}10` },
                             ]}
                           >
                             <Ionicons
                               name="navigate"
-                              size={22}
-                              color="#6366f1"
+                              size={18}
+                              color={ACCENT}
                             />
                           </View>
-                          <View style={styles.locationTextBox}>
+                          <View style={s.locInfo}>
                             <Text
                               style={[
-                                styles.locationLabel,
+                                s.locAlmacen,
                                 { color: colors.textTertiary },
                               ]}
                             >
-                              Localización
+                              {item.almacen}
                             </Text>
-                            <Text
-                              style={[
-                                styles.locationValue,
-                                { color: colors.text },
-                              ]}
-                            >
+                            <Text style={[s.locValue, { color: colors.text }]}>
                               {item.ubicacion || "Sin asignar"}
                             </Text>
                           </View>
-                          <Ionicons
-                            name="pencil"
-                            size={18}
-                            color={colors.textTertiary}
-                          />
+                          <View
+                            style={[
+                              s.editIcon,
+                              { backgroundColor: colors.background },
+                            ]}
+                          >
+                            <Ionicons
+                              name="pencil"
+                              size={13}
+                              color={colors.textTertiary}
+                            />
+                          </View>
                         </TouchableOpacity>
                       )}
                     </View>
                   ))}
                 </View>
               ) : (
-                <View style={styles.emptyContainer}>
+                <View style={s.emptyWrap}>
                   <View
-                    style={[
-                      styles.emptyIcon,
-                      { backgroundColor: colors.surface },
-                    ]}
+                    style={[s.emptyCircle, { backgroundColor: colors.surface }]}
                   >
                     <Ionicons
                       name="location-outline"
-                      size={32}
+                      size={28}
                       color={colors.textTertiary}
                     />
                   </View>
-                  <Text style={[styles.emptyTitle, { color: colors.text }]}>
+                  <Text style={[s.emptyTitle, { color: colors.text }]}>
                     Sin ubicaciones
                   </Text>
-                  <Text
-                    style={[styles.emptyText, { color: colors.textTertiary }]}
-                  >
-                    No hay ubicaciones asignadas
+                  <Text style={[s.emptyDesc, { color: colors.textTertiary }]}>
+                    No hay ubicaciones asignadas a este artículo
                   </Text>
                 </View>
               )}
@@ -451,18 +441,16 @@ export default function QuickLocationModal({
         animationType="fade"
         statusBarTranslucent
       >
-        <View style={styles.successBackdrop}>
-          <View
-            style={[styles.successCard, { backgroundColor: colors.background }]}
-          >
+        <View style={s.successBackdrop}>
+          <View style={[s.successCard, { backgroundColor: colors.background }]}>
             <LottieView
               ref={lottieRef}
               source={require("@/assets/animations/success.json")}
               autoPlay
               loop={false}
-              style={styles.successLottie}
+              style={s.successLottie}
             />
-            <Text style={[styles.successText, { color: colors.text }]}>
+            <Text style={[s.successText, { color: colors.text }]}>
               ¡Ubicación actualizada!
             </Text>
           </View>
@@ -472,198 +460,125 @@ export default function QuickLocationModal({
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    justifyContent: "flex-end",
-  },
-  container: {
+const s = StyleSheet.create({
+  backdrop: { flex: 1, justifyContent: "flex-end" },
+  sheet: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: "80%",
+    maxHeight: "75%",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 20,
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 24,
   },
-  handleBar: {
-    alignItems: "center",
-    paddingVertical: 12,
-  },
-  handle: {
-    width: 36,
-    height: 5,
-    borderRadius: 3,
-  },
+  handleWrap: { alignItems: "center", paddingTop: 10, paddingBottom: 6 },
+  handle: { width: 36, height: 4, borderRadius: 2 },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingBottom: 12,
   },
-  headerLeft: {
+  headerTitle: { fontSize: 18, fontWeight: "700", letterSpacing: -0.3 },
+  closeBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  articlePill: {
     flexDirection: "row",
     alignItems: "center",
-    flex: 1,
+    marginHorizontal: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    gap: 6,
+    marginBottom: 16,
   },
-  headerIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+  articleSku: { fontSize: 12, fontWeight: "600" },
+  articleName: { fontSize: 12, fontWeight: "500", flex: 1 },
+
+  scrollContent: { paddingHorizontal: 20, paddingBottom: 8 },
+  groupedCard: { borderRadius: 14, overflow: "hidden" },
+
+  // Row
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  locIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
   },
-  headerText: {
-    flex: 1,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: "700",
-    letterSpacing: -0.4,
-  },
-  subtitle: {
-    fontSize: 13,
-    marginTop: 2,
-  },
-  closeBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  content: {
-    paddingHorizontal: 20,
-    paddingBottom: 10,
-  },
-  loadingContainer: {
-    paddingVertical: 40,
-  },
-  loadingBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 16,
-    borderRadius: 12,
-    gap: 12,
-  },
-  loadingText: {
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  listContainer: {
-    gap: 12,
-  },
-  locationCard: {
-    borderRadius: 16,
-    overflow: "hidden",
-  },
-  cardHeader: {
-    paddingHorizontal: 14,
-    paddingTop: 14,
-    paddingBottom: 8,
-  },
-  almacenBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-start",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    gap: 6,
-  },
-  almacenText: {
-    fontSize: 12,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  locationMain: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 14,
-    paddingBottom: 14,
-  },
-  locationIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 14,
-  },
-  locationTextBox: {
-    flex: 1,
-  },
-  locationLabel: {
+  locInfo: { flex: 1 },
+  locAlmacen: {
     fontSize: 11,
     fontWeight: "600",
     textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 3,
+    letterSpacing: 0.4,
+    marginBottom: 2,
   },
-  locationValue: {
-    fontSize: 18,
+  locValue: { fontSize: 16, fontWeight: "700", letterSpacing: 0.3 },
+  editIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  // Edit mode
+  editWrap: { padding: 16 },
+  editHeader: { marginBottom: 10 },
+  editAlmacen: {
+    fontSize: 11,
     fontWeight: "700",
+    textTransform: "uppercase",
     letterSpacing: 0.5,
-  },
-  editContainer: {
-    paddingHorizontal: 14,
-    paddingBottom: 14,
   },
   editInput: {
-    height: 48,
-    borderRadius: 12,
-    paddingHorizontal: 16,
+    height: 46,
+    borderRadius: 10,
+    paddingHorizontal: 14,
     fontSize: 16,
     fontWeight: "600",
     borderWidth: 2,
     marginBottom: 12,
   },
-  editActions: {
-    flexDirection: "row",
-    gap: 10,
-  },
+  editActions: { flexDirection: "row", gap: 10 },
   editBtn: {
     flex: 1,
-    height: 44,
+    height: 42,
     borderRadius: 10,
     justifyContent: "center",
     alignItems: "center",
   },
-  cancelBtn: {
-    borderWidth: 1,
-  },
-  saveBtn: {},
-  editBtnText: {
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  emptyContainer: {
-    paddingVertical: 50,
-    alignItems: "center",
-  },
-  emptyIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
+  editBtnText: { fontSize: 14, fontWeight: "600" },
+
+  // Empty
+  emptyWrap: { alignItems: "center", paddingVertical: 44 },
+  emptyCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 14,
   },
-  emptyTitle: {
-    fontSize: 17,
-    fontWeight: "600",
-    marginBottom: 6,
-  },
-  emptyText: {
-    fontSize: 14,
-    textAlign: "center",
-  },
-  // Success Modal Styles
+  emptyTitle: { fontSize: 16, fontWeight: "600", marginBottom: 4 },
+  emptyDesc: { fontSize: 13, textAlign: "center", lineHeight: 18 },
+
+  // Success
   successBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",
@@ -681,10 +596,7 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 20,
   },
-  successLottie: {
-    width: 100,
-    height: 100,
-  },
+  successLottie: { width: 100, height: 100 },
   successText: {
     fontSize: 15,
     fontWeight: "600",
