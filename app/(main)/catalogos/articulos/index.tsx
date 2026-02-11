@@ -12,7 +12,7 @@ import { getCurrentDatabaseId } from "@/services/api";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useFocusEffect, useRouter } from "expo-router";
 import React, {
     useCallback,
     useEffect,
@@ -23,11 +23,13 @@ import React, {
 import {
     ActivityIndicator,
     Alert,
+    Animated,
     Dimensions,
     FlatList,
     Image,
     Keyboard,
     Modal,
+    Platform,
     RefreshControl,
     ScrollView,
     StyleSheet,
@@ -102,6 +104,20 @@ export default function ArticulosScreen() {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const [isScannerVisible, setIsScannerVisible] = useState(false);
+  const hiddenInputRef = useRef<TextInput>(null);
+  const [hiddenScanValue, setHiddenScanValue] = useState("");
+
+  // Re-focus hidden input cuando la pantalla está activa
+  useFocusEffect(
+    useCallback(() => {
+      const timer = setTimeout(() => {
+        if (!isScannerVisible) {
+          hiddenInputRef.current?.focus();
+        }
+      }, 300);
+      return () => clearTimeout(timer);
+    }, [isScannerVisible])
+  );
 
   // Escuchar trigger de cámara desde el botón flotante
   const { onCameraTrigger } = useAssistive();
@@ -935,6 +951,32 @@ export default function ArticulosScreen() {
     >
       <Stack.Screen options={{ headerShown: false }} />
 
+      {/* Hidden PDA/Scanner Input - captura escaneos sin tocar nada */}
+      <TextInput
+        ref={hiddenInputRef}
+        autoFocus
+        showSoftInputOnFocus={false}
+        caretHidden
+        value={hiddenScanValue}
+        onChangeText={setHiddenScanValue}
+        style={styles.hiddenInput}
+        onSubmitEditing={() => {
+          const code = hiddenScanValue.trim();
+          setHiddenScanValue("");
+          if (code) {
+            setSearchQuery(code);
+            handleSearch({ nativeEvent: { text: code } });
+          }
+        }}
+        blurOnSubmit={false}
+        onBlur={() => {
+          // Siempre re-focus a menos que el scanner modal esté abierto
+          if (!isScannerVisible) {
+            setTimeout(() => hiddenInputRef.current?.focus(), 50);
+          }
+        }}
+      />
+
       {/* Header Estilo iOS */}
       <View style={styles.headerContainer}>
         <View style={styles.topRow}>
@@ -971,53 +1013,58 @@ export default function ArticulosScreen() {
           </View>
         </View>
 
-        <View style={styles.searchContainer}>
-          <View
+        {/* Search Bar */}
+        <View
+          style={[
+            styles.topSearchRow,
+            {
+              backgroundColor: isDark
+                ? "rgba(255,255,255,0.08)"
+                : "rgba(142,142,147,0.12)",
+            },
+          ]}
+        >
+          <Ionicons name="search" size={16} color={colors.textTertiary} />
+          <TextInput
+            style={[styles.topSearchText, { color: colors.text }]}
+            placeholder="Buscar artículos..."
+            placeholderTextColor={colors.textTertiary}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onSubmitEditing={(e) => handleSearch(e)}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity
+              onPress={() => {
+                setSearchQuery("");
+                setLastSearch("");
+                if (hasFetched) {
+                  fetchArticulos(1, "", true, activeFilter);
+                }
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              style={{ padding: 4 }}
+            >
+              <Ionicons
+                name="close-circle"
+                size={18}
+                color={colors.textTertiary}
+              />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            onPress={() => {
+              setIsScannerVisible(true);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            }}
             style={[
-              styles.iosSearchBar,
-              {
-                backgroundColor: isDark
-                  ? "rgba(255,255,255,0.1)"
-                  : "rgba(142,142,147,0.12)",
-              },
+              styles.topScanBtn,
+              { backgroundColor: colors.accent },
             ]}
           >
-            <Ionicons name="search" size={16} color={colors.textTertiary} />
-            <TextInput
-              style={[styles.iosSearchInput, { color: colors.text }]}
-              placeholder="Buscar"
-              placeholderTextColor={colors.textTertiary}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              onSubmitEditing={(e) => handleSearch(e)}
-              returnKeyType="search"
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity
-                onPress={() => {
-                  setSearchQuery("");
-                  setLastSearch("");
-                  if (hasFetched) {
-                    fetchArticulos(1, "", true, activeFilter);
-                  }
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                }}
-                style={{ padding: 4 }}
-              >
-                <Ionicons
-                  name="close-circle"
-                  size={18}
-                  color={colors.textTertiary}
-                />
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              onPress={() => setIsScannerVisible(true)}
-              style={{ padding: 4, marginLeft: 4 }}
-            >
-              <Ionicons name="camera-outline" size={20} color={colors.accent} />
-            </TouchableOpacity>
-          </View>
+            <Ionicons name="scan-outline" size={18} color="#fff" />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -1025,151 +1072,202 @@ export default function ArticulosScreen() {
       {!hasFetched ? (
         <ScrollView
           style={{ flex: 1 }}
-          contentContainerStyle={{ padding: 16 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: 160 }}
           showsVerticalScrollIndicator={false}
         >
           {/* Sucursal Selector */}
-          <View style={{ marginBottom: 20 }}>
-            <Text
+          <TouchableOpacity
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              alignSelf: "flex-start",
+              backgroundColor: selectedSucursal
+                ? colors.accent + "12"
+                : isDark
+                  ? "rgba(255,255,255,0.06)"
+                  : "rgba(0,0,0,0.04)",
+              borderRadius: 24,
+              paddingVertical: 10,
+              paddingLeft: 10,
+              paddingRight: 14,
+              marginBottom: 24,
+              gap: 8,
+            }}
+            onPress={() => setIsSucursalModalVisible(true)}
+            activeOpacity={0.7}
+          >
+            <View
               style={{
-                fontSize: 13,
-                fontWeight: "600",
-                color: colors.textSecondary,
-                marginBottom: 10,
-                letterSpacing: 0.5,
+                width: 32,
+                height: 32,
+                borderRadius: 16,
+                backgroundColor: selectedSucursal
+                  ? colors.accent + "20"
+                  : isDark
+                    ? "rgba(255,255,255,0.08)"
+                    : "rgba(0,0,0,0.06)",
+                alignItems: "center",
+                justifyContent: "center",
               }}
             >
-              SUCURSAL
-            </Text>
-            <TouchableOpacity
-              style={[
-                {
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  backgroundColor: colors.surface,
-                  borderRadius: 12,
-                  padding: 16,
-                  borderWidth: 1,
-                  borderColor: selectedSucursal ? colors.accent : colors.border,
-                },
-              ]}
-              onPress={() => setIsSucursalModalVisible(true)}
-            >
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
-              >
-                <View
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 10,
-                    backgroundColor: selectedSucursal
-                      ? colors.accent + "20"
-                      : colors.border + "40",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <Ionicons
-                    name="business-outline"
-                    size={20}
-                    color={
-                      selectedSucursal ? colors.accent : colors.textSecondary
-                    }
-                  />
-                </View>
-                <View>
-                  <Text
-                    style={{
-                      color: colors.text,
-                      fontWeight: "600",
-                      fontSize: 15,
-                    }}
-                  >
-                    {selectedSucursal
-                      ? selectedSucursal.nombre
-                      : "Todas las Sucursales"}
-                  </Text>
-                  <Text style={{ fontSize: 12, color: colors.textTertiary }}>
-                    {sucursales.length} sucursales disponibles
-                  </Text>
-                </View>
-              </View>
               <Ionicons
-                name="chevron-forward"
-                size={20}
-                color={colors.textTertiary}
+                name={selectedSucursal ? "business" : "storefront-outline"}
+                size={16}
+                color={selectedSucursal ? colors.accent : colors.textTertiary}
               />
-            </TouchableOpacity>
-          </View>
+            </View>
+            <Text
+              style={{
+                fontSize: 15,
+                fontWeight: "600",
+                color: selectedSucursal ? colors.accent : colors.text,
+                letterSpacing: -0.3,
+              }}
+              numberOfLines={1}
+            >
+              {selectedSucursal
+                ? selectedSucursal.nombre
+                : "Todas las Sucursales"}
+            </Text>
+            <Ionicons
+              name="chevron-down"
+              size={16}
+              color={selectedSucursal ? colors.accent : colors.textTertiary}
+            />
+          </TouchableOpacity>
 
-          {/* Dashboard Grid - 6 botones grandes */}
+          {/* Dashboard Grid - Premium 2x2 */}
           <Text
             style={{
               fontSize: 13,
-              fontWeight: "600",
-              color: colors.textSecondary,
+              fontWeight: "700",
+              color: colors.textTertiary,
               marginBottom: 12,
-              letterSpacing: 0.5,
+              letterSpacing: 1,
+              textTransform: "uppercase",
             }}
           >
-            FILTRAR POR ESTADO DE STOCK
+            Estado de Stock
           </Text>
           <View
             style={{
               flexDirection: "row",
               flexWrap: "wrap",
-              gap: 12,
+              gap: 10,
               marginBottom: 20,
             }}
           >
             {dashboardFilters.map((filter) => {
-              // Obtener count para all y agotados, 0 para el resto
               const count =
                 filter.id === "all"
                   ? filterCounts.all
                   : filter.id === "agotados"
                     ? filterCounts.out
                     : 0;
+              const CARD_W = (width - 42) / 2;
 
               return (
                 <TouchableOpacity
                   key={filter.id}
                   style={{
-                    width: (width - 44) / 2,
-                    backgroundColor: colors.surface,
-                    borderRadius: 16,
-                    padding: 20,
-                    borderWidth: 2,
-                    borderColor:
-                      activeFilter === filter.id ? filter.color : colors.border,
-                    alignItems: "center",
-                    justifyContent: "center",
+                    width: CARD_W,
+                    height: CARD_W * 0.85,
+                    backgroundColor: isDark
+                      ? "rgba(255,255,255,0.05)"
+                      : colors.surface,
+                    borderRadius: 22,
+                    padding: 16,
+                    justifyContent: "space-between",
+                    shadowColor: "#000",
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: isDark ? 0.35 : 0.08,
+                    shadowRadius: 14,
+                    elevation: 4,
+                    overflow: "hidden",
                   }}
                   onPress={() => handleFilterClick(filter.id)}
                   activeOpacity={0.7}
                 >
-                  <Text
+                  {/* Decorative gradient circle */}
+                  <View
                     style={{
-                      fontSize: 32,
-                      fontWeight: "800",
-                      color: filter.color,
-                      marginBottom: 8,
+                      position: "absolute",
+                      top: -20,
+                      right: -20,
+                      width: 80,
+                      height: 80,
+                      borderRadius: 40,
+                      backgroundColor: filter.color + "08",
+                    }}
+                  />
+                  <View
+                    style={{
+                      position: "absolute",
+                      bottom: -30,
+                      left: -15,
+                      width: 60,
+                      height: 60,
+                      borderRadius: 30,
+                      backgroundColor: filter.color + "05",
+                    }}
+                  />
+
+                  {/* Top: Icon */}
+                  <View
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 12,
+                      backgroundColor: filter.color + "15",
+                      alignItems: "center",
+                      justifyContent: "center",
                     }}
                   >
-                    {count.toLocaleString()}
-                  </Text>
-                  <Text
-                    style={{
-                      fontSize: 14,
-                      fontWeight: "600",
-                      color: colors.text,
-                      textAlign: "center",
-                    }}
-                  >
-                    {filter.label}
-                  </Text>
+                    <Ionicons
+                      name={filter.icon}
+                      size={20}
+                      color={filter.color}
+                    />
+                  </View>
+
+                  {/* Bottom: Label + Count */}
+                  <View>
+                    <Text
+                      style={{
+                        fontSize: 15,
+                        fontWeight: "700",
+                        color: colors.text,
+                        letterSpacing: -0.3,
+                        marginBottom: 2,
+                      }}
+                      numberOfLines={1}
+                    >
+                      {filter.label}
+                    </Text>
+                    {count > 0 ? (
+                      <Text
+                        style={{
+                          fontSize: 24,
+                          fontWeight: "800",
+                          color: filter.color,
+                          letterSpacing: -1,
+                          lineHeight: 28,
+                        }}
+                      >
+                        {count.toLocaleString()}
+                      </Text>
+                    ) : (
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          color: colors.textTertiary,
+                          fontWeight: "500",
+                        }}
+                      >
+                        Toca para ver
+                      </Text>
+                    )}
+                  </View>
                 </TouchableOpacity>
               );
             })}
@@ -1179,51 +1277,60 @@ export default function ArticulosScreen() {
         </ScrollView>
       ) : (
         <>
-          {/* Sucursal Selector - modo compacto cuando hay resultados */}
+          {/* Sucursal + Filter compact bar */}
           <View
             style={{
               flexDirection: "row",
               alignItems: "center",
               justifyContent: "space-between",
               paddingHorizontal: 16,
-              paddingVertical: 8,
-              backgroundColor: colors.surface,
-              borderBottomWidth: 1,
-              borderBottomColor: colors.border + "30",
+              paddingVertical: 10,
             }}
           >
             <TouchableOpacity
-              style={[
-                styles.sucursalChip,
-                {
-                  backgroundColor: selectedSucursal
-                    ? colors.accent
-                    : colors.background,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                },
-              ]}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+                backgroundColor: selectedSucursal
+                  ? colors.accent + "15"
+                  : isDark
+                    ? "rgba(255,255,255,0.06)"
+                    : "rgba(0,0,0,0.04)",
+                paddingHorizontal: 12,
+                paddingVertical: 7,
+                borderRadius: 20,
+              }}
               onPress={() => setIsSucursalModalVisible(true)}
             >
               <Ionicons
-                name="business-outline"
-                size={16}
-                color={selectedSucursal ? "#fff" : colors.textSecondary}
+                name="business"
+                size={14}
+                color={selectedSucursal ? colors.accent : colors.textTertiary}
               />
               <Text
                 style={{
-                  color: selectedSucursal ? "#fff" : colors.textSecondary,
+                  color: selectedSucursal
+                    ? colors.accent
+                    : colors.textSecondary,
                   fontWeight: "600",
                   fontSize: 13,
+                  letterSpacing: -0.2,
                 }}
+                numberOfLines={1}
               >
                 {selectedSucursal
                   ? selectedSucursal.nombre.substring(0, 15)
-                  : "Todas las Sucursales"}
+                  : "Todas"}
               </Text>
+              <Ionicons
+                name="chevron-down"
+                size={12}
+                color={selectedSucursal ? colors.accent : colors.textTertiary}
+              />
             </TouchableOpacity>
 
-            {/* Filter chip showing current filter */}
+            {/* Filter chip + close */}
             <View
               style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
             >
@@ -1231,13 +1338,13 @@ export default function ArticulosScreen() {
                 style={{
                   backgroundColor:
                     dashboardFilters.find((f) => f.id === activeFilter)?.color +
-                    "20",
+                    "15",
                   paddingHorizontal: 12,
                   paddingVertical: 6,
                   borderRadius: 20,
                   flexDirection: "row",
                   alignItems: "center",
-                  gap: 6,
+                  gap: 5,
                 }}
               >
                 <Ionicons
@@ -1245,7 +1352,7 @@ export default function ArticulosScreen() {
                     dashboardFilters.find((f) => f.id === activeFilter)?.icon ||
                     "apps-outline"
                   }
-                  size={14}
+                  size={13}
                   color={
                     dashboardFilters.find((f) => f.id === activeFilter)?.color
                   }
@@ -1253,16 +1360,16 @@ export default function ArticulosScreen() {
                 <Text
                   style={{
                     fontSize: 12,
-                    fontWeight: "600",
+                    fontWeight: "700",
                     color: dashboardFilters.find((f) => f.id === activeFilter)
                       ?.color,
+                    letterSpacing: -0.2,
                   }}
                 >
                   {dashboardFilters.find((f) => f.id === activeFilter)?.label}
                 </Text>
               </View>
 
-              {/* Clear button to go back to dashboard */}
               <TouchableOpacity
                 onPress={() => {
                   setHasFetched(false);
@@ -1272,13 +1379,18 @@ export default function ArticulosScreen() {
                   setActiveFilter("all");
                   setSelectedSucursal(null);
                 }}
-                style={{ padding: 4 }}
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 14,
+                  backgroundColor: isDark
+                    ? "rgba(255,255,255,0.06)"
+                    : "rgba(0,0,0,0.04)",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
               >
-                <Ionicons
-                  name="close-circle"
-                  size={22}
-                  color={colors.textTertiary}
-                />
+                <Ionicons name="close" size={16} color={colors.textTertiary} />
               </TouchableOpacity>
             </View>
           </View>
@@ -1288,9 +1400,7 @@ export default function ArticulosScreen() {
             <View
               style={{
                 paddingHorizontal: 20,
-                paddingVertical: 8,
-                borderBottomWidth: 1,
-                borderBottomColor: colors.border + "30",
+                paddingVertical: 6,
               }}
             >
               <Text
@@ -1424,9 +1534,12 @@ export default function ArticulosScreen() {
         visible={isScannerVisible}
         onClose={() => setIsScannerVisible(false)}
         onScan={(code) => {
-          setSearchQuery(code);
-          handleSearch({ nativeEvent: { text: code } });
           setIsScannerVisible(false);
+          // Pequeño delay para que cierre el modal primero
+          setTimeout(() => {
+            setSearchQuery(code);
+            handleSearch({ nativeEvent: { text: code } });
+          }, 300);
         }}
       />
 
@@ -1603,88 +1716,231 @@ export default function ArticulosScreen() {
 
       {/* Sucursal Selection Modal */}
       <Modal visible={isSucursalModalVisible} animationType="slide" transparent>
-        <View style={styles.sucursalModalOverlay}>
-          <View
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => setIsSucursalModalVisible(false)}
+          style={{ flex: 1 }}
+        >
+          <BlurView
+            intensity={60}
+            tint={isDark ? "dark" : "light"}
             style={[
-              styles.sucursalModalContent,
-              { backgroundColor: colors.background },
+              StyleSheet.absoluteFill,
+              {
+                backgroundColor: isDark ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.2)",
+              },
             ]}
+          />
+        </TouchableOpacity>
+        <View
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            backgroundColor: isDark ? "#1c1c1e" : "#f2f2f7",
+            borderTopLeftRadius: 20,
+            borderTopRightRadius: 20,
+            maxHeight: "65%",
+            paddingBottom: insets.bottom > 0 ? insets.bottom : 20,
+          }}
+        >
+          {/* Drag handle */}
+          <View
+            style={{ alignItems: "center", paddingTop: 10, paddingBottom: 6 }}
           >
-            <View style={styles.sucursalModalHeader}>
-              <Text style={[styles.sucursalModalTitle, { color: colors.text }]}>
-                Seleccionar Sucursal
-              </Text>
-              <TouchableOpacity
-                onPress={() => setIsSucursalModalVisible(false)}
-              >
-                <Ionicons name="close" size={24} color={colors.text} />
-              </TouchableOpacity>
-            </View>
+            <View
+              style={{
+                width: 36,
+                height: 5,
+                borderRadius: 3,
+                backgroundColor: isDark
+                  ? "rgba(255,255,255,0.15)"
+                  : "rgba(0,0,0,0.12)",
+              }}
+            />
+          </View>
 
-            <TouchableOpacity
-              style={[
-                styles.sucursalItem,
-                {
-                  backgroundColor: !selectedSucursal
-                    ? `${colors.accent}20`
-                    : colors.surface,
-                },
-              ]}
-              onPress={() => {
-                setSelectedSucursal(null);
-                setIsSucursalModalVisible(false);
+          {/* Header */}
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              paddingHorizontal: 20,
+              paddingBottom: 14,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 20,
+                fontWeight: "700",
+                color: colors.text,
+                letterSpacing: -0.5,
               }}
             >
-              <Text style={[styles.sucursalItemText, { color: colors.text }]}>
-                Todas las Sucursales
-              </Text>
-              {!selectedSucursal && (
-                <Ionicons
-                  name="checkmark-circle"
-                  size={22}
-                  color={colors.accent}
-                />
-              )}
+              Sucursal
+            </Text>
+            <TouchableOpacity
+              onPress={() => setIsSucursalModalVisible(false)}
+              style={{
+                width: 30,
+                height: 30,
+                borderRadius: 15,
+                backgroundColor: isDark
+                  ? "rgba(255,255,255,0.1)"
+                  : "rgba(0,0,0,0.06)",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Ionicons name="close" size={18} color={colors.textSecondary} />
             </TouchableOpacity>
+          </View>
 
-            <FlatList
-              data={sucursales}
-              keyExtractor={(item) => item.id.toString()}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[
-                    styles.sucursalItem,
-                    {
-                      backgroundColor:
-                        selectedSucursal?.id === item.id
-                          ? `${colors.accent}20`
-                          : colors.surface,
-                    },
-                  ]}
-                  onPress={() => {
-                    setSelectedSucursal(item);
-                    setIsSucursalModalVisible(false);
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          {/* Items in grouped card */}
+          <View style={{ paddingHorizontal: 16 }}>
+            <View
+              style={{
+                backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "#fff",
+                borderRadius: 14,
+                overflow: "hidden",
+              }}
+            >
+              {/* Todas las sucursales */}
+              <TouchableOpacity
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  paddingVertical: 13,
+                  paddingHorizontal: 16,
+                  borderBottomWidth: StyleSheet.hairlineWidth,
+                  borderBottomColor: isDark
+                    ? "rgba(255,255,255,0.06)"
+                    : "rgba(0,0,0,0.06)",
+                }}
+                onPress={() => {
+                  setSelectedSucursal(null);
+                  setIsSucursalModalVisible(false);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+              >
+                <View
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 8,
+                    backgroundColor: !selectedSucursal
+                      ? colors.accent
+                      : isDark
+                        ? "rgba(255,255,255,0.06)"
+                        : "rgba(0,0,0,0.04)",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginRight: 12,
                   }}
                 >
-                  <Text
-                    style={[styles.sucursalItemText, { color: colors.text }]}
+                  <Ionicons
+                    name="globe-outline"
+                    size={17}
+                    color={!selectedSucursal ? "#fff" : colors.textTertiary}
+                  />
+                </View>
+                <Text
+                  style={{
+                    flex: 1,
+                    fontSize: 16,
+                    fontWeight: !selectedSucursal ? "600" : "400",
+                    color: colors.text,
+                    letterSpacing: -0.2,
+                  }}
+                >
+                  Todas las Sucursales
+                </Text>
+                {!selectedSucursal && (
+                  <Ionicons name="checkmark" size={20} color={colors.accent} />
+                )}
+              </TouchableOpacity>
+
+              {/* Sucursales list */}
+              <FlatList
+                data={sucursales}
+                keyExtractor={(item) => item.id.toString()}
+                renderItem={({ item, index: idx }) => (
+                  <TouchableOpacity
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      paddingVertical: 13,
+                      paddingHorizontal: 16,
+                      borderBottomWidth:
+                        idx < sucursales.length - 1
+                          ? StyleSheet.hairlineWidth
+                          : 0,
+                      borderBottomColor: isDark
+                        ? "rgba(255,255,255,0.06)"
+                        : "rgba(0,0,0,0.06)",
+                    }}
+                    onPress={() => {
+                      setSelectedSucursal(item);
+                      setIsSucursalModalVisible(false);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    }}
                   >
-                    {item.nombre}
-                  </Text>
-                  {selectedSucursal?.id === item.id && (
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={22}
-                      color={colors.accent}
-                    />
-                  )}
-                </TouchableOpacity>
-              )}
-            />
+                    <View
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 8,
+                        backgroundColor:
+                          selectedSucursal?.id === item.id
+                            ? colors.accent
+                            : isDark
+                              ? "rgba(255,255,255,0.06)"
+                              : "rgba(0,0,0,0.04)",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginRight: 12,
+                      }}
+                    >
+                      <Ionicons
+                        name="business"
+                        size={16}
+                        color={
+                          selectedSucursal?.id === item.id
+                            ? "#fff"
+                            : colors.textTertiary
+                        }
+                      />
+                    </View>
+                    <Text
+                      style={{
+                        flex: 1,
+                        fontSize: 16,
+                        fontWeight:
+                          selectedSucursal?.id === item.id ? "600" : "400",
+                        color: colors.text,
+                        letterSpacing: -0.2,
+                      }}
+                    >
+                      {item.nombre}
+                    </Text>
+                    {selectedSucursal?.id === item.id && (
+                      <Ionicons
+                        name="checkmark"
+                        size={20}
+                        color={colors.accent}
+                      />
+                    )}
+                  </TouchableOpacity>
+                )}
+              />
+            </View>
           </View>
         </View>
       </Modal>
+
+
     </View>
   );
 }
@@ -1722,22 +1978,6 @@ const styles = StyleSheet.create({
   actionIconBtn: {
     padding: 4,
   },
-  searchContainer: {
-    marginBottom: 8,
-  },
-  iosSearchBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    height: 38,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    gap: 6,
-  },
-  iosSearchInput: {
-    flex: 1,
-    fontSize: 17,
-    paddingVertical: 0,
-  },
   filterContainer: {
     flexDirection: "row",
     marginHorizontal: 16,
@@ -1766,12 +2006,12 @@ const styles = StyleSheet.create({
   list: {
     padding: 16,
     paddingTop: 0,
-    paddingBottom: 100,
+    paddingBottom: 160,
   },
   grid: {
     padding: 16,
     paddingTop: 0,
-    paddingBottom: 100,
+    paddingBottom: 160,
   },
   // List View Styles - Apple minimalista
   card: {
@@ -2107,5 +2347,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 20,
     gap: 4,
+  },
+  // Top Search Bar
+  topSearchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    height: 38,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  topSearchText: {
+    flex: 1,
+    fontSize: 15,
+    paddingVertical: 0,
+  },
+  topScanBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: 4,
+  },
+  hiddenInput: {
+    position: "absolute",
+    width: 0,
+    height: 0,
+    opacity: 0,
   },
 });

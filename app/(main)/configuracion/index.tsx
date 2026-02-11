@@ -3,9 +3,10 @@ import { useLanguage } from "@/context/language-context";
 import { useTheme, useThemeColors } from "@/context/theme-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import React from "react";
+import React, { useMemo } from "react";
 import {
   Image,
+  Platform,
   ScrollView,
   StyleSheet,
   Switch,
@@ -14,84 +15,94 @@ import {
   View,
 } from "react-native";
 
+/* ─── Avatar presets (synced with avatar-dropdown) ─── */
+const AVATARS = [
+  { id: "a1", source: require("@/assets/images/a1.png") },
+  { id: "a2", source: require("@/assets/images/a2.png") },
+  { id: "a3", source: require("@/assets/images/a3.png") },
+  { id: "a4", source: require("@/assets/images/a4.png") },
+  { id: "a5", source: require("@/assets/images/a5.png") },
+  { id: "a6", source: require("@/assets/images/a6.png") },
+];
+
+/* ─── Types ─── */
 type SettingItemProps = {
   icon: keyof typeof Ionicons.glyphMap;
-  iconColor?: string;
+  iconTint?: string;
   label: string;
-  description?: string;
+  value?: string;
   badge?: string;
   onPress?: () => void;
   rightElement?: React.ReactNode;
   showChevron?: boolean;
 };
 
+/* ─── Setting Item (KRKN style) ─── */
 function SettingItem({
   icon,
-  iconColor,
+  iconTint,
   label,
-  description,
+  value,
   badge,
   onPress,
   rightElement,
   showChevron = true,
 }: SettingItemProps) {
   const colors = useThemeColors();
-  const { isDark } = useTheme();
+  const tint = iconTint || colors.accent;
 
   return (
     <TouchableOpacity
-      style={[styles.settingItem, { backgroundColor: colors.surface }]}
+      style={[
+        s.settingItem,
+        { backgroundColor: colors.surface },
+      ]}
       onPress={onPress}
-      activeOpacity={onPress ? 0.7 : 1}
+      activeOpacity={onPress ? 0.6 : 1}
       disabled={!onPress && !rightElement}
     >
-      <View
-        style={[
-          styles.settingIconContainer,
-          {
-            backgroundColor: isDark
-              ? "rgba(255,255,255,0.1)"
-              : "rgba(0,0,0,0.05)",
-          },
-        ]}
-      >
-        <Ionicons name={icon} size={20} color={iconColor || colors.accent} />
+      <View style={[s.settingIconCircle, { backgroundColor: tint + "18" }]}>
+        <Ionicons name={icon} size={19} color={tint} />
       </View>
-      <View style={styles.settingContent}>
-        <View style={styles.labelRow}>
-          <Text style={[styles.settingLabel, { color: colors.text }]}>
-            {label}
-          </Text>
-          {badge && (
-            <View
-              style={[styles.badge, { backgroundColor: colors.accent + "20" }]}
-            >
-              <Text style={[styles.badgeText, { color: colors.accent }]}>
-                {badge}
-              </Text>
-            </View>
-          )}
-        </View>
-        {description && (
-          <Text
-            style={[styles.settingDescription, { color: colors.textSecondary }]}
+      <View style={s.settingBody}>
+        <Text
+          style={[s.settingLabel, { color: colors.text }]}
+          numberOfLines={1}
+        >
+          {label}
+        </Text>
+        {badge && (
+          <View
+            style={[s.badge, { backgroundColor: colors.accent + "18" }]}
           >
-            {description}
-          </Text>
+            <Text style={[s.badgeText, { color: colors.accent }]}>
+              {badge}
+            </Text>
+          </View>
         )}
       </View>
+      {value && !rightElement && (
+        <Text
+          style={[s.settingValue, { color: colors.textTertiary }]}
+          numberOfLines={1}
+        >
+          {value}
+        </Text>
+      )}
       {rightElement}
       {showChevron && onPress && !rightElement && (
         <Ionicons
           name="chevron-forward"
-          size={20}
-          color={colors.textSecondary}
+          size={16}
+          color={colors.textTertiary}
+          style={{ marginLeft: 2 }}
         />
       )}
     </TouchableOpacity>
   );
 }
 
+/* ─── Setting Section (KRKN grouped) ─── */
 function SettingSection({
   title,
   children,
@@ -102,22 +113,44 @@ function SettingSection({
   const colors = useThemeColors();
 
   return (
-    <View style={styles.section}>
-      <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-        {title}
-      </Text>
-      <View style={[styles.sectionContent, { borderColor: colors.border }]}>
-        {children}
+    <View style={s.section}>
+      <View style={s.sectionHeader}>
+        <View style={[s.sectionDot, { backgroundColor: colors.accent }]} />
+        <Text style={[s.sectionTitle, { color: colors.textSecondary }]}>
+          {title}
+        </Text>
       </View>
+      <View style={s.sectionItems}>{children}</View>
     </View>
   );
 }
 
+/* ─── Main Screen ─── */
 export default function ConfiguracionScreen() {
   const colors = useThemeColors();
   const { isDark, toggleTheme } = useTheme();
-  const { companyCode, logout } = useAuth();
+  const { companyCode, user, logout } = useAuth();
   const { t, language } = useLanguage();
+
+  /* ── Resolve avatar source ── */
+  const avatarSource = useMemo(() => {
+    if (!user?.AVATAR_URL) return require("@/assets/images/avatar.png");
+    if (user.AVATAR_URL.startsWith("avatar:")) {
+      const id = user.AVATAR_URL.replace("avatar:", "");
+      return AVATARS.find((a) => a.id === id)?.source || require("@/assets/images/avatar.png");
+    }
+    return { uri: user.AVATAR_URL };
+  }, [user?.AVATAR_URL]);
+
+  const fullName = user
+    ? `${user.NOMBRE || ""} ${user.APELLIDO_PATERNO || ""}`.trim() || user.USERNAME
+    : "Usuario";
+
+  const initials = user
+    ? `${(user.NOMBRE || "").charAt(0)}${(user.APELLIDO_PATERNO || "").charAt(0)}`.toUpperCase()
+    : "U";
+
+  const email = user?.EMAIL || `usuario@${companyCode}.krkn.mx`;
 
   const handleLogout = () => {
     logout();
@@ -126,77 +159,103 @@ export default function ConfiguracionScreen() {
 
   return (
     <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={styles.contentContainer}
+      style={[s.container, { backgroundColor: colors.background }]}
+      contentContainerStyle={s.contentContainer}
       showsVerticalScrollIndicator={false}
     >
-      {/* Header del perfil */}
-      <View
+      {/* ── Profile Card ── */}
+      <TouchableOpacity
+        activeOpacity={0.7}
+        onPress={() => router.push("/(main)/configuracion/perfil")}
         style={[
-          styles.profileHeader,
-          { backgroundColor: colors.surface, borderColor: colors.border },
+          s.profileCard,
+          {
+            backgroundColor: colors.surface,
+            shadowColor: isDark ? "rgba(0,0,0,0.5)" : colors.cardShadow,
+          },
         ]}
       >
-        <View style={styles.avatarContainer}>
-          <Image
-            source={require("@/assets/images/avatar.png")}
-            style={styles.avatar}
-          />
-          <TouchableOpacity
-            style={[
-              styles.editAvatarButton,
-              { backgroundColor: colors.accent },
-            ]}
-            onPress={() => router.push("/(main)/configuracion/perfil")}
-          >
-            <Ionicons name="camera" size={14} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-        <Text style={[styles.userName, { color: colors.text }]}>
-          Usuario KRKN
-        </Text>
-        <Text style={[styles.userEmail, { color: colors.textSecondary }]}>
-          usuario@{companyCode}.krkn.mx
-        </Text>
-        <TouchableOpacity
-          style={[styles.editProfileButton, { borderColor: colors.border }]}
-          onPress={() => router.push("/(main)/configuracion/perfil")}
-        >
-          <Text style={[styles.editProfileText, { color: colors.accent }]}>
-            {t("settings.editProfile")}
-          </Text>
-        </TouchableOpacity>
-      </View>
+        <View style={s.profileRow}>
+          {/* Avatar */}
+          <View style={s.avatarWrap}>
+            {user?.AVATAR_URL ? (
+              <Image source={avatarSource} style={s.avatar} />
+            ) : (
+              <View
+                style={[
+                  s.avatar,
+                  s.avatarInitials,
+                  { backgroundColor: colors.accent },
+                ]}
+              >
+                <Text style={s.avatarInitialsText}>{initials}</Text>
+              </View>
+            )}
+          </View>
 
-      {/* Cuenta */}
+          {/* Info */}
+          <View style={s.profileInfo}>
+            <Text
+              style={[s.profileName, { color: colors.text }]}
+              numberOfLines={1}
+            >
+              {fullName}
+            </Text>
+            <Text
+              style={[s.profileEmail, { color: colors.textSecondary }]}
+              numberOfLines={1}
+            >
+              {email}
+            </Text>
+            {user?.USERNAME && (
+              <Text
+                style={[s.profileUsername, { color: colors.textTertiary }]}
+                numberOfLines={1}
+              >
+                @{user.USERNAME}
+              </Text>
+            )}
+          </View>
+
+          {/* Chevron */}
+          <Ionicons
+            name="chevron-forward"
+            size={20}
+            color={colors.textTertiary}
+          />
+        </View>
+      </TouchableOpacity>
+
+      {/* ── Cuenta ── */}
       <SettingSection title={t("settings.section.account")}>
         <SettingItem
           icon="person-outline"
           label={t("settings.profile")}
-          description={t("settings.profileDesc")}
+          value={t("settings.profileDesc")}
           onPress={() => router.push("/(main)/configuracion/perfil")}
         />
         <SettingItem
           icon="business-outline"
+          iconTint="#5856D6"
           label={t("settings.account")}
-          description={`${companyCode}.krkn.mx`}
+          value={`${companyCode}.krkn.mx`}
           onPress={() => router.push("/(main)/configuracion/cuenta")}
         />
         <SettingItem
           icon="key-outline"
+          iconTint="#FF9500"
           label={t("settings.security")}
-          description={t("settings.securityDesc")}
+          value={t("settings.securityDesc")}
           onPress={() => router.push("/(main)/configuracion/seguridad")}
         />
       </SettingSection>
 
-      {/* Preferencias */}
+      {/* ── Preferencias ── */}
       <SettingSection title={t("settings.section.preferences")}>
         <SettingItem
           icon={isDark ? "moon" : "sunny"}
-          iconColor={isDark ? "#9333EA" : "#F59E0B"}
+          iconTint={isDark ? "#AF52DE" : "#FF9500"}
           label={t("settings.darkMode")}
-          description={t("settings.darkModeDesc")}
           showChevron={false}
           rightElement={
             <Switch
@@ -204,191 +263,216 @@ export default function ConfiguracionScreen() {
               onValueChange={toggleTheme}
               trackColor={{ false: "#E5E7EB", true: colors.accent }}
               thumbColor="#FFFFFF"
+              style={Platform.OS === "ios" ? { transform: [{ scaleX: 0.85 }, { scaleY: 0.85 }] } : undefined}
             />
           }
         />
         <SettingItem
           icon="color-palette-outline"
+          iconTint="#AF52DE"
           label={t("settings.appearance")}
-          description={t("settings.appearanceDesc")}
+          value={t("settings.appearanceDesc")}
           onPress={() => router.push("/(main)/configuracion/apariencia")}
         />
         <SettingItem
           icon="notifications-outline"
+          iconTint="#FF3B30"
           label={t("settings.notifications")}
-          description={t("settings.notificationsDesc")}
           onPress={() => router.push("/(main)/configuracion/notificaciones")}
         />
         <SettingItem
           icon="language-outline"
           label={t("settings.language")}
-          description={
-            language === "es"
-              ? t("settings.languageDesc")
-              : t("settings.languageDescEn")
-          }
+          value={language === "es" ? "Español" : "English"}
           onPress={() => router.push("/(main)/configuracion/idioma")}
         />
         <SettingItem
           icon="hand-left-outline"
-          iconColor="#EF476F"
+          iconTint="#FF2D55"
           label="Botón de asistencia"
-          description="Activa un botón flotante de emergencia"
           badge="BETA"
           onPress={() => router.push("/(main)/configuracion/asistencia")}
         />
       </SettingSection>
 
-      {/* Almacén */}
+      {/* ── Almacén ── */}
       <SettingSection title={t("settings.section.warehouse")}>
         <SettingItem
           icon="cube-outline"
+          iconTint="#34C759"
           label={t("settings.warehouse")}
-          description="Almacén Principal"
+          value="Principal"
           onPress={() => {}}
         />
         <SettingItem
           icon="print-outline"
+          iconTint="#5AC8FA"
           label={t("settings.printer")}
-          description={t("settings.printerDesc")}
+          value={t("settings.printerDesc")}
           onPress={() => {}}
         />
         <SettingItem
           icon="scan-outline"
+          iconTint="#FF9500"
           label={t("settings.scanner")}
-          description={t("settings.scannerDesc")}
+          value={t("settings.scannerDesc")}
           onPress={() => {}}
         />
       </SettingSection>
 
-      {/* Información */}
+      {/* ── Información ── */}
       <SettingSection title={t("settings.section.info")}>
         <SettingItem
           icon="information-circle-outline"
+          iconTint="#8E8E93"
           label={t("settings.about")}
-          description={t("settings.aboutDesc")}
+          value="v1.0.9"
           onPress={() => router.push("/(main)/configuracion/acerca")}
         />
         <SettingItem
           icon="help-circle-outline"
           label="Ayuda y Soporte"
-          description="FAQ, contacto, tutoriales"
           onPress={() => {}}
         />
         <SettingItem
           icon="document-text-outline"
+          iconTint="#8E8E93"
           label="Términos y Condiciones"
           onPress={() => {}}
         />
       </SettingSection>
 
-      {/* Cerrar sesión */}
-      <TouchableOpacity
-        style={[
-          styles.logoutButton,
-          { backgroundColor: "rgba(255, 69, 58, 0.1)" },
-        ]}
-        onPress={handleLogout}
-      >
-        <Ionicons name="log-out-outline" size={20} color="#FF453A" />
-        <Text style={styles.logoutText}>Cerrar sesión</Text>
-      </TouchableOpacity>
+      {/* ── Cerrar sesión ── */}
+      <View style={s.logoutSection}>
+        <SettingItem
+          icon="log-out-outline"
+          iconTint="#FF3B30"
+          label="Cerrar sesión"
+          showChevron={false}
+          onPress={handleLogout}
+        />
+      </View>
 
-      {/* Versión */}
-      <Text style={[styles.versionText, { color: colors.textSecondary }]}>
-        KRKN WMS v1.0.9 
-      </Text>
+      {/* ── Footer ── */}
+      <View style={s.footer}>
+        <Text style={[s.footerVersion, { color: colors.textTertiary }]}>
+          KRKN WMS v1.0.9
+        </Text>
+        <Text style={[s.footerCopy, { color: colors.textTertiary }]}>
+          © 2025 KRKN Systems
+        </Text>
+      </View>
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
+/* ─── Styles ─── */
+const RADIUS = 14;
+
+const s = StyleSheet.create({
   container: {
     flex: 1,
   },
   contentContainer: {
-    paddingBottom: 40,
+    paddingBottom: 50,
   },
-  profileHeader: {
-    alignItems: "center",
-    paddingVertical: 24,
-    paddingHorizontal: 20,
+
+  /* ── Profile ── */
+  profileCard: {
     marginHorizontal: 16,
     marginTop: 16,
-    borderRadius: 16,
-    borderWidth: 1,
+    borderRadius: RADIUS,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    elevation: 3,
   },
-  avatarContainer: {
-    position: "relative",
-    marginBottom: 12,
+  profileRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 14,
   },
+  avatarWrap: {},
   avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
   },
-  editAvatarButton: {
-    position: "absolute",
-    bottom: 0,
-    right: 0,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+  avatarInitials: {
     justifyContent: "center",
     alignItems: "center",
   },
-  userName: {
+  avatarInitialsText: {
     fontSize: 20,
     fontWeight: "700",
-    marginBottom: 4,
+    color: "#FFFFFF",
+    letterSpacing: -0.3,
   },
-  userEmail: {
-    fontSize: 14,
-    marginBottom: 16,
+  profileInfo: {
+    flex: 1,
   },
-  editProfileButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 20,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  editProfileText: {
-    fontSize: 14,
+  profileName: {
+    fontSize: 18,
     fontWeight: "600",
+    letterSpacing: -0.3,
   },
+  profileEmail: {
+    fontSize: 13,
+    marginTop: 2,
+    letterSpacing: -0.1,
+  },
+  profileUsername: {
+    fontSize: 12,
+    marginTop: 1,
+    letterSpacing: -0.1,
+  },
+
+  /* ── Sections ── */
   section: {
     marginTop: 24,
     paddingHorizontal: 16,
   },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: "600",
-    letterSpacing: 0.5,
-    marginBottom: 8,
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
     marginLeft: 4,
+    gap: 8,
   },
-  sectionContent: {
-    borderRadius: 16,
-    overflow: "hidden",
+  sectionDot: {
+    width: 4,
+    height: 16,
+    borderRadius: 2,
   },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    letterSpacing: -0.1,
+  },
+  sectionItems: {
+    gap: 6,
+  },
+
+  /* ── Setting Item ── */
   settingItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    gap: 14,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    gap: 12,
   },
-  settingIconContainer: {
+  settingIconCircle: {
     width: 36,
     height: 36,
-    borderRadius: 10,
+    borderRadius: 18,
     justifyContent: "center",
     alignItems: "center",
   },
-  settingContent: {
+  settingBody: {
     flex: 1,
-  },
-  labelRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -396,39 +480,44 @@ const styles = StyleSheet.create({
   settingLabel: {
     fontSize: 15,
     fontWeight: "500",
+    letterSpacing: -0.2,
+  },
+  settingValue: {
+    fontSize: 13,
+    letterSpacing: -0.1,
+    maxWidth: 120,
+    textAlign: "right",
   },
   badge: {
-    paddingHorizontal: 6,
+    paddingHorizontal: 7,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: 5,
   },
   badgeText: {
     fontSize: 9,
-    fontWeight: "700",
-    letterSpacing: 0.5,
+    fontWeight: "800",
+    letterSpacing: 0.6,
   },
-  settingDescription: {
-    fontSize: 12,
-    marginTop: 2,
+
+  /* ── Logout ── */
+  logoutSection: {
+    marginTop: 28,
+    paddingHorizontal: 16,
   },
-  logoutButton: {
-    flexDirection: "row",
+
+  /* ── Footer ── */
+  footer: {
     alignItems: "center",
-    justifyContent: "center",
-    marginHorizontal: 16,
-    marginTop: 32,
-    paddingVertical: 14,
-    borderRadius: 12,
-    gap: 10,
+    marginTop: 24,
+    gap: 4,
   },
-  logoutText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#FF453A",
-  },
-  versionText: {
-    textAlign: "center",
+  footerVersion: {
     fontSize: 12,
-    marginTop: 20,
+    fontWeight: "500",
+    letterSpacing: -0.1,
+  },
+  footerCopy: {
+    fontSize: 11,
+    letterSpacing: -0.1,
   },
 });
