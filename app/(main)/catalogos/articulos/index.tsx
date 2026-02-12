@@ -23,13 +23,11 @@ import React, {
 import {
     ActivityIndicator,
     Alert,
-    Animated,
     Dimensions,
     FlatList,
     Image,
     Keyboard,
     Modal,
-    Platform,
     RefreshControl,
     ScrollView,
     StyleSheet,
@@ -106,6 +104,7 @@ export default function ArticulosScreen() {
   const [isScannerVisible, setIsScannerVisible] = useState(false);
   const hiddenInputRef = useRef<TextInput>(null);
   const [hiddenScanValue, setHiddenScanValue] = useState("");
+  const isSearchFocusedRef = useRef(false);
 
   // Re-focus hidden input cuando la pantalla está activa
   useFocusEffect(
@@ -116,7 +115,7 @@ export default function ArticulosScreen() {
         }
       }, 300);
       return () => clearTimeout(timer);
-    }, [isScannerVisible])
+    }, [isScannerVisible]),
   );
 
   // Escuchar trigger de cámara desde el botón flotante
@@ -970,9 +969,13 @@ export default function ArticulosScreen() {
         }}
         blurOnSubmit={false}
         onBlur={() => {
-          // Siempre re-focus a menos que el scanner modal esté abierto
-          if (!isScannerVisible) {
-            setTimeout(() => hiddenInputRef.current?.focus(), 50);
+          // Re-focus solo si el usuario no está usando el search input visible
+          if (!isScannerVisible && !isSearchFocusedRef.current) {
+            setTimeout(() => {
+              if (!isSearchFocusedRef.current) {
+                hiddenInputRef.current?.focus();
+              }
+            }, 300);
           }
         }}
       />
@@ -1014,7 +1017,11 @@ export default function ArticulosScreen() {
         </View>
 
         {/* Search Bar */}
-        <View
+        <TouchableOpacity
+          activeOpacity={1}
+          onPressIn={() => {
+            isSearchFocusedRef.current = true;
+          }}
           style={[
             styles.topSearchRow,
             {
@@ -1033,6 +1040,14 @@ export default function ArticulosScreen() {
             onChangeText={setSearchQuery}
             onSubmitEditing={(e) => handleSearch(e)}
             returnKeyType="search"
+            onFocus={() => {
+              isSearchFocusedRef.current = true;
+            }}
+            onBlur={() => {
+              isSearchFocusedRef.current = false;
+              // Devolver foco al scanner hidden
+              setTimeout(() => hiddenInputRef.current?.focus(), 200);
+            }}
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity
@@ -1058,21 +1073,18 @@ export default function ArticulosScreen() {
               setIsScannerVisible(true);
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             }}
-            style={[
-              styles.topScanBtn,
-              { backgroundColor: colors.accent },
-            ]}
+            style={[styles.topScanBtn, { backgroundColor: colors.accent }]}
           >
             <Ionicons name="scan-outline" size={18} color="#fff" />
           </TouchableOpacity>
-        </View>
+        </TouchableOpacity>
       </View>
 
       {/* Dashboard - Solo visible cuando no hay resultados mostrados */}
       {!hasFetched ? (
         <ScrollView
           style={{ flex: 1 }}
-          contentContainerStyle={{ padding: 16, paddingBottom: 160 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
           showsVerticalScrollIndicator={false}
         >
           {/* Sucursal Selector */}
@@ -1939,8 +1951,6 @@ export default function ArticulosScreen() {
           </View>
         </View>
       </Modal>
-
-
     </View>
   );
 }
@@ -2006,12 +2016,12 @@ const styles = StyleSheet.create({
   list: {
     padding: 16,
     paddingTop: 0,
-    paddingBottom: 160,
+    paddingBottom: 40,
   },
   grid: {
     padding: 16,
     paddingTop: 0,
-    paddingBottom: 160,
+    paddingBottom: 40,
   },
   // List View Styles - Apple minimalista
   card: {

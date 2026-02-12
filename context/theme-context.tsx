@@ -1,10 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, {
-  createContext,
-  ReactNode,
-  useContext,
-  useEffect,
-  useState,
+    createContext,
+    ReactNode,
+    useContext,
+    useEffect,
+    useState,
 } from "react";
 import { useColorScheme as useSystemColorScheme } from "react-native";
 
@@ -679,6 +679,17 @@ export function useTheme() {
 export function useThemeScale() {
   const { uiScale } = useTheme();
   return (size: number) => Math.round(size * uiScale);
+}
+
+/**
+ * Hook para escalar fuentes según el uiScale del usuario.
+ * Retorna un objeto con tamaños escalados para uso directo.
+ * Ejemplo: const fs = useFontScale(); <Text style={{ fontSize: fs(16) }}>
+ */
+export function useFontScale() {
+  const { uiScale } = useTheme();
+  const scale = (size: number) => Math.round(size * uiScale);
+  return scale;
 }
 
 // Mantener compatibilidad con el código existente

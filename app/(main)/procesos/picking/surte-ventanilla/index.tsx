@@ -9,17 +9,17 @@ import * as Haptics from "expo-haptics";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Animated,
-  BackHandler,
-  Dimensions,
-  Image,
-  Modal,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Animated,
+    BackHandler,
+    Dimensions,
+    Image,
+    Modal,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -168,12 +168,17 @@ export default function SurteVentanillaScreen() {
   // Focus scanner
   useEffect(() => {
     const interval = setInterval(() => {
-      if (!alert.visible && !exitModalVisible) {
+      if (
+        !alert.visible &&
+        !exitModalVisible &&
+        !showCameraScanner &&
+        !qtyModal.visible
+      ) {
         scannerRef.current?.focus();
       }
-    }, 500);
+    }, 300);
     return () => clearInterval(interval);
-  }, [alert.visible, exitModalVisible]);
+  }, [alert.visible, exitModalVisible, showCameraScanner, qtyModal.visible]);
 
   const handleBarcodeScanned = (code: string) => {
     const cleanedCode = code.trim();
@@ -575,9 +580,24 @@ export default function SurteVentanillaScreen() {
         style={styles.hiddenInput}
         autoFocus
         showSoftInputOnFocus={false}
+        blurOnSubmit={false}
         value={tempBarcode}
         onChangeText={setTempBarcode}
-        onSubmitEditing={() => handleBarcodeScanned(tempBarcode)}
+        onSubmitEditing={() => {
+          const code = tempBarcode.trim();
+          setTempBarcode("");
+          if (code) handleBarcodeScanned(code);
+        }}
+        onBlur={() => {
+          if (
+            !alert.visible &&
+            !exitModalVisible &&
+            !showCameraScanner &&
+            !qtyModal.visible
+          ) {
+            setTimeout(() => scannerRef.current?.focus(), 100);
+          }
+        }}
       />
 
       {/* Header personalizado */}

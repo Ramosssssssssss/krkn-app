@@ -43,6 +43,11 @@ interface Articulo {
   CONFIRMADO?: boolean;
 }
 
+interface CajaSimple {
+  CODIGO_CAJA: string;
+  NOMBRE_CAJA: string;
+}
+
 export default function SurteTraspasoScreen() {
   const { folio, traspasoInId, almacenOrigen, almacenDestino } =
     useLocalSearchParams();
@@ -57,6 +62,14 @@ export default function SurteTraspasoScreen() {
     visible: false,
     message: "",
   });
+
+  // Caja / Carrito
+  const [assignedBoxes, setAssignedBoxes] = useState<string[]>([]);
+  const [pickingStarted, setPickingStarted] = useState(false);
+  const [validatingBox, setValidatingBox] = useState(false);
+  const [availableBoxes, setAvailableBoxes] = useState<CajaSimple[]>([]);
+  const [boxScannerText, setBoxScannerText] = useState("");
+  const boxInputRef = useRef<TextInput>(null);
 
   // Validación de Ubicaciones
   const [unlockedLocations, setUnlockedLocations] = useState<Set<string>>(
@@ -249,18 +262,99 @@ export default function SurteTraspasoScreen() {
     }
   }, [traspasoInId]);
 
+  const fetchAvailableBoxes = useCallback(async () => {
+    try {
+      const databaseId = getCurrentDatabaseId();
+      const response = await fetch(`${API_URL}/api/cajas-disponibles.php`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ databaseId, limit: 10 }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        const flatBoxes: CajaSimple[] = [];
+        data.grupos.forEach((g: any) => {
+          g.cajas.forEach((c: any) => flatBoxes.push(c));
+        });
+        setAvailableBoxes(flatBoxes.slice(0, 8));
+      }
+    } catch (_e) {
+      console.error("Error fetching boxes:", _e);
+    }
+  }, []);
+
+  const handleConfirmBoxSelection = async (codigo: string) => {
+    setValidatingBox(true);
+    try {
+      const databaseId = getCurrentDatabaseId();
+      const response = await fetch(`${API_URL}/api/validar-caja-picking.php`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ databaseId, codigo }),
+      });
+      const data = await response.json();
+
+      if (data && data.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setAssignedBoxes((prev) => [...prev, codigo]);
+        setPickingStarted(true);
+
+        // Crear apartado (CJ_APARTADO_KRKN) e implantar folio
+        try {
+          await fetch(`${API_URL}/api/crear-apartado.php`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              databaseId,
+              codigoCaja: codigo,
+              folio: folio as string,
+              pickerId: user?.USUARIO_ID || 0,
+              nombrePicker: user?.NOMBRE || "PICKER",
+            }),
+          })
+            .then((r) => r.json())
+            .then((res) => {
+              console.log("[PICKING] Apartado creado:", res);
+            });
+        } catch (err) {
+          console.error("[PICKING] Error al crear apartado:", err);
+        }
+      } else {
+        setAlert({
+          visible: true,
+          message:
+            (data && data.message) || "La caja no está disponible o no existe.",
+        });
+      }
+    } catch (e: any) {
+      console.error("Error validating box:", e);
+      setAlert({
+        visible: true,
+        message: "Error al validar caja: " + (e.message || "Error de conexión"),
+      });
+    } finally {
+      setValidatingBox(false);
+      setBoxScannerText("");
+    }
+  };
+
   useEffect(() => {
     fetchDetalles();
-  }, [fetchDetalles]);
+    fetchAvailableBoxes();
+  }, [fetchDetalles, fetchAvailableBoxes]);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      if (!alert.visible && !exitModalVisible) {
-        scannerRef.current?.focus();
+      if (!alert.visible && !exitModalVisible && !showCameraScanner) {
+        if (!pickingStarted) {
+          boxInputRef.current?.focus();
+        } else {
+          scannerRef.current?.focus();
+        }
       }
-    }, 500);
+    }, 300);
     return () => clearInterval(interval);
-  }, [alert.visible, exitModalVisible]);
+  }, [alert.visible, exitModalVisible, pickingStarted, showCameraScanner]);
 
   const handleBarcodeScanned = (code: string) => {
     const cleanedCode = code.trim();
@@ -565,6 +659,7 @@ export default function SurteTraspasoScreen() {
         body: JSON.stringify({
           databaseId,
           traspasoId: traspasoInId,
+          folio: folio as string,
           nuevoEstatus: "S",
           fechaFin,
           horaFin,
@@ -581,7 +676,11 @@ export default function SurteTraspasoScreen() {
       console.log("[TRASPASO] Respuesta traspaso-enviado:", data);
 
       if (data.success) {
-        setAlert({ visible: true, message: "¡Traspaso finalizado con éxito!" });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setAlert({
+          visible: true,
+          message: "🎉 ¡Traspaso completado!\n\n📦 Caja lista para packing",
+        });
         setTimeout(() => {
           router.replace("/(main)/procesos/picking/traspasos/index" as any);
         }, 2000);
@@ -628,6 +727,229 @@ export default function SurteTraspasoScreen() {
       setCurrentIndex(viewableItems[0].index);
     }
   }).current;
+
+  // ─── Caja selection screen (before picking) ─────────────────────────
+  if (!pickingStarted) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <StatusBar barStyle={colors.dark ? "light-content" : "dark-content"} />
+        <View style={[styles.headerSimple, { paddingTop: insets.top + 20 }]}>
+          <TouchableOpacity
+            onPress={() => setExitModalVisible(true)}
+            style={styles.backBtn}
+          >
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: colors.text, flex: 1 }]}>
+            Espacio de Picking
+          </Text>
+          <TouchableOpacity
+            onPress={() => setPickingStarted(true)}
+            style={[styles.skipBtn, { backgroundColor: colors.border }]}
+          >
+            <Text style={[styles.skipBtnText, { color: colors.textSecondary }]}>
+              Omitir
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView contentContainerStyle={styles.boxSelectionContent}>
+          <View style={styles.welcomeInfo}>
+            <View
+              style={[
+                styles.iconCircle,
+                { backgroundColor: colors.accent + "10" },
+              ]}
+            >
+              <Ionicons
+                name="archive-outline"
+                size={60}
+                color={colors.accent}
+              />
+            </View>
+            <Text style={[styles.welcomeTitle, { color: colors.text }]}>
+              Asignar Almacenamiento
+            </Text>
+            <Text style={[styles.welcomeSub, { color: colors.textSecondary }]}>
+              Escanea el código de la caja para comenzar a surtir el traspaso{" "}
+              <Text style={{ fontWeight: "800" }}>{folio}</Text>.
+            </Text>
+          </View>
+
+          <View
+            style={[
+              styles.scanArea,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
+            <Ionicons name="barcode-outline" size={30} color={colors.accent} />
+            <Text style={[styles.scanLabel, { color: colors.textSecondary }]}>
+              {validatingBox ? "Validando..." : "Esperando escaneo de caja..."}
+            </Text>
+            {validatingBox && (
+              <ActivityIndicator
+                size="small"
+                color={colors.accent}
+                style={{ marginTop: 10 }}
+              />
+            )}
+            <TextInput
+              ref={boxInputRef}
+              style={styles.hiddenInput}
+              autoFocus
+              showSoftInputOnFocus={false}
+              blurOnSubmit={false}
+              value={boxScannerText}
+              onChangeText={setBoxScannerText}
+              onSubmitEditing={() => {
+                const code = boxScannerText.trim();
+                setBoxScannerText("");
+                if (code) handleConfirmBoxSelection(code);
+              }}
+              onBlur={() => {
+                if (!alert.visible && !exitModalVisible) {
+                  setTimeout(() => boxInputRef.current?.focus(), 100);
+                }
+              }}
+            />
+          </View>
+
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+            DISPONIBLES RECIENTEMENTE
+          </Text>
+
+          <View style={styles.boxGrid}>
+            {availableBoxes.map((box) => (
+              <TouchableOpacity
+                key={box.CODIGO_CAJA}
+                style={[styles.boxCard, { backgroundColor: colors.surface }]}
+                onPress={() => handleConfirmBoxSelection(box.CODIGO_CAJA)}
+              >
+                <Ionicons
+                  name="cube-outline"
+                  size={20}
+                  color={colors.textTertiary}
+                />
+                <Text
+                  style={[styles.boxCardCode, { color: colors.text }]}
+                  numberOfLines={1}
+                >
+                  {box.CODIGO_CAJA}
+                </Text>
+                <Text
+                  style={[styles.boxCardName, { color: colors.textTertiary }]}
+                  numberOfLines={1}
+                >
+                  {box.NOMBRE_CAJA}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </ScrollView>
+
+        {/* Exit Modal (also needed here) */}
+        <Modal visible={exitModalVisible} transparent animationType="fade">
+          <View style={styles.modalOverlayAlt}>
+            <BlurView
+              intensity={20}
+              style={StyleSheet.absoluteFill}
+              tint="dark"
+            />
+            <View
+              style={[
+                styles.modalContentAlt,
+                { backgroundColor: colors.surface },
+              ]}
+            >
+              <View style={{ padding: 20, alignItems: "center" }}>
+                <Ionicons name="warning-outline" size={48} color="#F59E0B" />
+                <Text
+                  style={[
+                    styles.modalTitleAlt,
+                    { color: colors.text, marginTop: 10 },
+                  ]}
+                >
+                  ¿Seguro que quieres salir?
+                </Text>
+                <Text
+                  style={[
+                    styles.modalMessageAlt,
+                    { color: colors.textSecondary },
+                  ]}
+                >
+                  Se perderá el progreso de este traspaso.
+                </Text>
+              </View>
+              <View style={styles.modalButtonsRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.modalBtnHalf,
+                    { backgroundColor: colors.border },
+                  ]}
+                  onPress={() => setExitModalVisible(false)}
+                >
+                  <Text
+                    style={[styles.modalBtnTextAlt, { color: colors.text }]}
+                  >
+                    Cancelar
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalBtnHalf, { backgroundColor: "#EF4444" }]}
+                  onPress={handleExit}
+                >
+                  <Text style={[styles.modalBtnTextAlt, { color: "#fff" }]}>
+                    Salir
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Alert modal */}
+        <Modal visible={alert.visible} transparent animationType="fade">
+          <View style={styles.modalOverlayAlt}>
+            <BlurView
+              intensity={20}
+              style={StyleSheet.absoluteFill}
+              tint="dark"
+            />
+            <View
+              style={[
+                styles.modalContentAlt,
+                { backgroundColor: colors.surface },
+              ]}
+            >
+              <View style={{ padding: 20, alignItems: "center" }}>
+                <Text style={[styles.modalTitleAlt, { color: colors.text }]}>
+                  Atención
+                </Text>
+                <Text
+                  style={[
+                    styles.modalMessageAlt,
+                    { color: colors.textSecondary },
+                  ]}
+                >
+                  {alert.message}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.modalBtnAlt, { borderTopColor: colors.border }]}
+                onPress={() => setAlert({ visible: false, message: "" })}
+              >
+                <Text
+                  style={[styles.modalBtnTextAlt, { color: colors.accent }]}
+                >
+                  OK
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -683,6 +1005,73 @@ export default function SurteTraspasoScreen() {
           </View>
         </View>
 
+        {/* Boxes row */}
+        <View style={styles.boxesRow}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.boxesScroll}
+          >
+            {assignedBoxes.map((box, idx) => (
+              <View
+                key={`${box}-${idx}`}
+                style={[
+                  styles.boxBadgeSmall,
+                  { backgroundColor: colors.surface },
+                ]}
+              >
+                <Ionicons name="cube-outline" size={12} color={colors.accent} />
+                <Text style={[styles.boxBadgeText, { color: colors.text }]}>
+                  {box}
+                </Text>
+                <TouchableOpacity
+                  onPress={() =>
+                    setAssignedBoxes((prev) => prev.filter((_, i) => i !== idx))
+                  }
+                  style={styles.removeBoxBtn}
+                >
+                  <Ionicons
+                    name="close-circle"
+                    size={14}
+                    color={colors.textTertiary}
+                  />
+                </TouchableOpacity>
+              </View>
+            ))}
+            <TouchableOpacity
+              style={[
+                styles.addBoxBtn,
+                {
+                  borderColor: colors.accent,
+                  backgroundColor: colors.accent + "10",
+                },
+              ]}
+              onPress={() => setPickingStarted(false)}
+            >
+              <Ionicons name="add" size={16} color={colors.accent} />
+              <Text style={[styles.addBoxText, { color: colors.accent }]}>
+                Caja
+              </Text>
+            </TouchableOpacity>
+            {/* Botón de cámara */}
+            <TouchableOpacity
+              style={[
+                styles.addBoxBtn,
+                {
+                  borderColor: "#3B82F6",
+                  backgroundColor: "#3B82F610",
+                },
+              ]}
+              onPress={openCameraScanner}
+            >
+              <Ionicons name="camera" size={16} color="#3B82F6" />
+              <Text style={[styles.addBoxText, { color: "#3B82F6" }]}>
+                Cámara
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+
         {/* Info del traspaso */}
         <View style={styles.traspasoRow}>
           <View
@@ -714,13 +1103,6 @@ export default function SurteTraspasoScreen() {
               </Text>
             </View>
           </View>
-          {/* Botón de cámara */}
-          <TouchableOpacity
-            style={[styles.cameraBtn, { backgroundColor: "#3B82F6" }]}
-            onPress={openCameraScanner}
-          >
-            <Ionicons name="camera" size={20} color="#fff" />
-          </TouchableOpacity>
         </View>
 
         <View style={styles.progressTrackGlobal}>
@@ -814,10 +1196,21 @@ export default function SurteTraspasoScreen() {
           <TextInput
             ref={scannerRef}
             style={styles.hiddenInput}
+            autoFocus
             showSoftInputOnFocus={false}
+            blurOnSubmit={false}
             value={tempBarcode}
             onChangeText={setTempBarcode}
-            onSubmitEditing={() => handleBarcodeScanned(tempBarcode)}
+            onSubmitEditing={() => {
+              const code = tempBarcode.trim();
+              setTempBarcode("");
+              if (code) handleBarcodeScanned(code);
+            }}
+            onBlur={() => {
+              if (!alert.visible && !exitModalVisible && !showCameraScanner) {
+                setTimeout(() => scannerRef.current?.focus(), 100);
+              }
+            }}
           />
 
           <View
@@ -1283,5 +1676,134 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 14,
     fontWeight: "800",
+  },
+
+  // ─── Box Selection Screen ────────────────────────────────────────────
+  headerSimple: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+    gap: 12,
+  },
+  backBtn: {
+    width: 44,
+    height: 44,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  skipBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  skipBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  boxSelectionContent: {
+    padding: 20,
+    paddingBottom: 60,
+  },
+  welcomeInfo: {
+    alignItems: "center",
+    marginBottom: 30,
+  },
+  iconCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  welcomeTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    letterSpacing: -0.5,
+    marginBottom: 8,
+  },
+  welcomeSub: {
+    fontSize: 14,
+    textAlign: "center",
+    lineHeight: 20,
+    paddingHorizontal: 20,
+  },
+  scanArea: {
+    alignItems: "center",
+    padding: 24,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    marginBottom: 24,
+  },
+  scanLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginTop: 10,
+  },
+  sectionTitle: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1,
+    marginBottom: 12,
+  },
+  boxGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  boxCard: {
+    width: "47%",
+    padding: 14,
+    borderRadius: 12,
+    alignItems: "center",
+    gap: 6,
+  },
+  boxCardCode: {
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  boxCardName: {
+    fontSize: 11,
+    fontWeight: "500",
+  },
+
+  // ─── Boxes Row (picking header) ──────────────────────────────────────
+  boxesRow: {
+    marginBottom: 8,
+  },
+  boxesScroll: {
+    gap: 6,
+    paddingVertical: 4,
+  },
+  boxBadgeSmall: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  boxBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  removeBoxBtn: {
+    marginLeft: 2,
+  },
+  addBoxBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderStyle: "dashed",
+  },
+  addBoxText: {
+    fontSize: 11,
+    fontWeight: "700",
   },
 });

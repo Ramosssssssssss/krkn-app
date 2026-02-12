@@ -12,17 +12,17 @@ import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Animated,
-  Dimensions,
-  Modal,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Animated,
+    Dimensions,
+    Modal,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArticleCardPicking } from "./_components/ArticleCardPicking";
@@ -296,6 +296,27 @@ export default function SurtePedidoScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setAssignedBoxes((prev) => [...prev, codigo]);
         setPickingStarted(true);
+
+        // Crear apartado (CJ_APARTADO_KRKN) e implantar folio
+        try {
+          await fetch(`${API_URL}/api/crear-apartado.php`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              databaseId,
+              codigoCaja: codigo,
+              folio: folio as string,
+              pickerId: user?.USUARIO_ID || 0,
+              nombrePicker: user?.NOMBRE || "PICKER",
+            }),
+          })
+            .then((r) => r.json())
+            .then((res) => {
+              console.log("[PICKING] Apartado creado:", res);
+            });
+        } catch (err) {
+          console.error("[PICKING] Error al crear apartado:", err);
+        }
       } else {
         setAlert({
           visible: true,
@@ -318,16 +339,16 @@ export default function SurtePedidoScreen() {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      if (!alert.visible) {
+      if (!alert.visible && !showCameraScanner) {
         if (!pickingStarted) {
           boxInputRef.current?.focus();
         } else {
           scannerRef.current?.focus();
         }
       }
-    }, 500);
+    }, 300);
     return () => clearInterval(interval);
-  }, [alert.visible, pickingStarted]);
+  }, [alert.visible, pickingStarted, showCameraScanner]);
 
   const handleBarcodeScanned = (code: string) => {
     const cleanedCode = code.trim();
@@ -650,16 +671,12 @@ export default function SurtePedidoScreen() {
       console.log("[PICKING] Respuesta pedido-enviado:", data);
 
       if (data.success) {
-        // Si se liberó una caja, mostrar mensaje especial
-        if (data.CAJA_LIBERADA) {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          setAlert({
-            visible: true,
-            message: `🎉 ¡Pedido completado!\n\n📦 ${data.CAJA_LIBERADA.codigo} liberada`,
-          });
-        } else {
-          setAlert({ visible: true, message: "¡Pedido finalizado con éxito!" });
-        }
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setAlert({
+          visible: true,
+          message:
+            "🎉 ¡Pedido finalizado con éxito!\n\n📦 Caja lista para packing",
+        });
 
         setTimeout(() => {
           router.replace("/(main)/procesos/picking/pedidos");
@@ -753,9 +770,19 @@ export default function SurtePedidoScreen() {
               style={styles.hiddenInput}
               autoFocus
               showSoftInputOnFocus={false}
+              blurOnSubmit={false}
               value={boxScannerText}
               onChangeText={setBoxScannerText}
-              onSubmitEditing={() => handleConfirmBoxSelection(boxScannerText)}
+              onSubmitEditing={() => {
+                const code = boxScannerText.trim();
+                setBoxScannerText("");
+                if (code) handleConfirmBoxSelection(code);
+              }}
+              onBlur={() => {
+                if (!alert.visible) {
+                  setTimeout(() => boxInputRef.current?.focus(), 100);
+                }
+              }}
             />
           </View>
 
@@ -994,10 +1021,21 @@ export default function SurtePedidoScreen() {
           <TextInput
             ref={scannerRef}
             style={styles.hiddenInput}
+            autoFocus
             showSoftInputOnFocus={false}
+            blurOnSubmit={false}
             value={tempBarcode}
             onChangeText={setTempBarcode}
-            onSubmitEditing={() => handleBarcodeScanned(tempBarcode)}
+            onSubmitEditing={() => {
+              const code = tempBarcode.trim();
+              setTempBarcode("");
+              if (code) handleBarcodeScanned(code);
+            }}
+            onBlur={() => {
+              if (!alert.visible && !showCameraScanner) {
+                setTimeout(() => scannerRef.current?.focus(), 100);
+              }
+            }}
           />
 
           <View

@@ -15,19 +15,19 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Dimensions,
-  FlatList,
-  Modal,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Dimensions,
+    FlatList,
+    Modal,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -114,27 +114,9 @@ export default function AcomodoScreen() {
     }
   }, [almacenes, selectedAlmacen, setSelectedAlmacen]);
 
-  // Mapeo de nombres de almacén a ALMACEN_ID real de Microsip
-  // TODO: Obtener estos IDs dinámicamente del backend
-  const ALMACEN_ID_MAP: Record<string, number> = {
-    "CEDIS Totolcingo": 19,
-    CEDIS: 19,
-  };
-
-  // Obtener el ALMACEN_ID real para usar con ubicaciones
-  const getAlmacenIdReal = (nombreAlmacen: string | undefined): number => {
-    if (!nombreAlmacen) return 19;
-    // Buscar match exacto primero
-    if (ALMACEN_ID_MAP[nombreAlmacen]) return ALMACEN_ID_MAP[nombreAlmacen];
-    // Buscar match parcial
-    const key = Object.keys(ALMACEN_ID_MAP).find((k) =>
-      nombreAlmacen.toUpperCase().includes(k.toUpperCase()),
-    );
-    return key ? ALMACEN_ID_MAP[key] : 19;
-  };
-
   const almacenActual = almacenes.find((a) => a.id === selectedAlmacen);
-  const almacenIdReal = getAlmacenIdReal(almacenActual?.nombre);
+  // selectedAlmacen ya es el ALMACEN_ID real de Microsip
+  const almacenIdReal = selectedAlmacen || 19;
 
   // Debug log cuando cambia el almacén
   useEffect(() => {
@@ -178,29 +160,53 @@ export default function AcomodoScreen() {
 
   // ─── Búsqueda por texto ─────────────────────────────────────────────────────
 
-  const buscarPorTexto = useCallback(async (query: string) => {
-    if (query.trim().length < 2) {
-      setSearchResults([]);
-      return;
-    }
-    setIsSearchingText(true);
-    try {
-      const databaseId = getCurrentDatabaseId();
-      const res = await fetch(
-        `${API_URL}/api/articulos.php?busqueda=${encodeURIComponent(query.trim())}&databaseId=${databaseId}`,
-      );
-      const data = await res.json();
-      if (data.ok && data.articulos) {
-        setSearchResults(data.articulos.slice(0, 15));
-      } else {
+  const buscarPorTexto = useCallback(
+    async (query: string) => {
+      if (query.trim().length < 2) {
         setSearchResults([]);
+        return;
       }
-    } catch {
-      setSearchResults([]);
-    } finally {
-      setIsSearchingText(false);
-    }
-  }, []);
+      setIsSearchingText(true);
+      try {
+        const databaseId = getCurrentDatabaseId();
+        const res = await fetch(
+          `${API_URL}/api/articulos.php?busqueda=${encodeURIComponent(query.trim())}&databaseId=${databaseId}&almacenId=${almacenIdReal}`,
+        );
+        const data = await res.json();
+        if (data.ok && data.articulos) {
+          const results = data.articulos.slice(0, 15);
+          if (results.length === 1) {
+            // Si solo hay 1 resultado, entrar directo
+            setSearchResults([]);
+            setSearchQuery("");
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            router.push({
+              pathname: "/(main)/procesos/acomodo/detalle",
+              params: {
+                articuloId: String(results[0].ARTICULO_ID),
+                clave: results[0].CLAVE || "",
+                nombre: results[0].NOMBRE || "",
+                codigoBarras: results[0].CODIGO_BARRAS || "",
+                unidadVenta: results[0].UNIDAD_VENTA || "PZA",
+                ubicacionActual: results[0].UBICACION || "",
+                almacenId: String(almacenIdReal),
+                almacenNombre: almacenActual?.nombre || "CEDIS",
+              },
+            });
+          } else {
+            setSearchResults(results);
+          }
+        } else {
+          setSearchResults([]);
+        }
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setIsSearchingText(false);
+      }
+    },
+    [almacenIdReal, almacenActual],
+  );
 
   // ─── Revertir acomodo ─────────────────────────────────────────────────────
 
@@ -323,6 +329,8 @@ export default function AcomodoScreen() {
   // PDA Input
   const pdaInputRef = useRef<TextInput>(null);
   const [pdaValue, setPdaValue] = useState("");
+  const isSearchFocusedRef = useRef(false);
+  const pdaFocusBlockedRef = useRef(false);
 
   // Reconocimiento de Artículo (Experimental)
   const [showRecognitionModal, setShowRecognitionModal] = useState(false);
@@ -364,6 +372,54 @@ export default function AcomodoScreen() {
     ubicacion: string;
   } | null>(null);
 
+  // ─── Helpers para saber si algún modal está abierto ────────────────────────
+  const anyModalOpen = useCallback(() => {
+    return (
+      scannerVisible ||
+      showRecognitionModal ||
+      showAlmacenPicker ||
+      showHistorialModal ||
+      !!revertItem ||
+      showRevertSuccess
+    );
+  }, [
+    scannerVisible,
+    showRecognitionModal,
+    showAlmacenPicker,
+    showHistorialModal,
+    revertItem,
+    showRevertSuccess,
+  ]);
+
+  // ─── Recuperar foco PDA cuando nada más lo necesita ────────────────────────
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (
+        !isSearchFocusedRef.current &&
+        !pdaFocusBlockedRef.current &&
+        !anyModalOpen()
+      ) {
+        pdaInputRef.current?.focus();
+      }
+    }, 800);
+    return () => clearInterval(interval);
+  }, [anyModalOpen]);
+
+  // Cuando todos los modales se cierran, recuperar foco PDA
+  useEffect(() => {
+    if (!anyModalOpen() && !isSearchFocusedRef.current) {
+      setTimeout(() => pdaInputRef.current?.focus(), 300);
+    }
+  }, [
+    scannerVisible,
+    showRecognitionModal,
+    showAlmacenPicker,
+    showHistorialModal,
+    revertItem,
+    showRevertSuccess,
+    anyModalOpen,
+  ]);
+
   // ─── Assistive Touch Camera ────────────────────────────────────────────────
 
   useEffect(() => {
@@ -393,9 +449,9 @@ export default function AcomodoScreen() {
     try {
       const databaseId = getCurrentDatabaseId();
 
-      // Buscar artículo (ahora incluye UBICACION desde almacen 19)
+      // Buscar artículo con ubicación del almacén seleccionado
       const res = await fetch(
-        `${API_URL}/api/articulos.php?busqueda=${encodeURIComponent(codigoLimpio)}&databaseId=${databaseId}`,
+        `${API_URL}/api/articulos.php?busqueda=${encodeURIComponent(codigoLimpio)}&databaseId=${databaseId}&almacenId=${almacenIdReal}`,
       );
       const data = await res.json();
 
@@ -654,7 +710,7 @@ Lee marca, números de modelo/código y color visibles en el empaque.`,
       for (const term of searchTerms.slice(0, 5)) {
         try {
           const searchRes = await fetch(
-            `${API_URL}/api/articulos.php?busqueda=${encodeURIComponent(term)}&databaseId=${databaseId}`,
+            `${API_URL}/api/articulos.php?busqueda=${encodeURIComponent(term)}&databaseId=${databaseId}&almacenId=${almacenIdReal}`,
           );
           const searchData = await searchRes.json();
 
@@ -824,9 +880,16 @@ Lee marca, números de modelo/código y color visibles en el empaque.`,
         }}
         blurOnSubmit={false}
         onBlur={() => {
-          if (!scannerVisible) {
-            setTimeout(() => pdaInputRef.current?.focus(), 50);
-          }
+          // Esperar 350ms para dar tiempo a que onFocus del search input se registre
+          setTimeout(() => {
+            if (
+              !isSearchFocusedRef.current &&
+              !pdaFocusBlockedRef.current &&
+              !anyModalOpen()
+            ) {
+              pdaInputRef.current?.focus();
+            }
+          }, 350);
         }}
       />
 
@@ -933,6 +996,20 @@ Lee marca, números de modelo/código y color visibles en el empaque.`,
             returnKeyType="search"
             autoCapitalize="none"
             autoCorrect={false}
+            onFocus={() => {
+              isSearchFocusedRef.current = true;
+              pdaFocusBlockedRef.current = true;
+            }}
+            onBlur={() => {
+              isSearchFocusedRef.current = false;
+              // Devolver foco al PDA tras salir del buscador (con delay generoso)
+              setTimeout(() => {
+                pdaFocusBlockedRef.current = false;
+                if (!anyModalOpen()) {
+                  pdaInputRef.current?.focus();
+                }
+              }, 400);
+            }}
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity
@@ -1088,7 +1165,9 @@ Lee marca, números de modelo/código y color visibles en el empaque.`,
         {/* ── Action Buttons — Compact iOS Style ── */}
         {!isSearching && (
           <>
-            <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>
+            <Text
+              style={[styles.sectionLabel, { color: colors.textSecondary }]}
+            >
               Acciones
             </Text>
             <View style={styles.actionsGrid}>
@@ -1109,7 +1188,9 @@ Lee marca, números de modelo/código y color visibles en el empaque.`,
                 >
                   <Ionicons name="camera" size={18} color="#fff" />
                 </LinearGradient>
-                <Text style={[styles.actionCompactText, { color: colors.text }]}>
+                <Text
+                  style={[styles.actionCompactText, { color: colors.text }]}
+                >
                   Escanear
                 </Text>
               </TouchableOpacity>
@@ -1131,7 +1212,9 @@ Lee marca, números de modelo/código y color visibles en el empaque.`,
                 >
                   <Ionicons name="search" size={18} color="#fff" />
                 </LinearGradient>
-                <Text style={[styles.actionCompactText, { color: colors.text }]}>
+                <Text
+                  style={[styles.actionCompactText, { color: colors.text }]}
+                >
                   Buscar
                 </Text>
               </TouchableOpacity>
@@ -1153,11 +1236,13 @@ Lee marca, números de modelo/código y color visibles en el empaque.`,
                 >
                   <Ionicons name="sparkles" size={18} color="#fff" />
                 </LinearGradient>
-                <Text style={[styles.actionCompactText, { color: colors.text }]}>
+                <Text
+                  style={[styles.actionCompactText, { color: colors.text }]}
+                >
                   Reconocer
                 </Text>
                 <View style={styles.aiBadgeCompact}>
-                  <Text style={styles.aiBadgeText}>IA</Text>
+                  <Text style={styles.aiBadgeText}>BETA</Text>
                 </View>
               </TouchableOpacity>
             </View>
@@ -2244,7 +2329,7 @@ Lee marca, números de modelo/código y color visibles en el empaque.`,
                             // Buscar página 1 y 2
                             for (const pagina of [1, 2]) {
                               const searchRes = await fetch(
-                                `${API_URL}/api/articulos.php?busqueda=${encodeURIComponent(term)}&databaseId=${databaseId}&pagina=${pagina}`,
+                                `${API_URL}/api/articulos.php?busqueda=${encodeURIComponent(term)}&databaseId=${databaseId}&almacenId=${almacenIdReal}&pagina=${pagina}`,
                               );
                               const searchData = await searchRes.json();
                               if (searchData.ok && searchData.articulos) {
@@ -2659,18 +2744,18 @@ const styles = StyleSheet.create({
   },
   aiBadgeCompact: {
     position: "absolute",
-    top: 8,
-    right: 8,
+    top: 6,
+    right: 6,
     backgroundColor: "rgba(245, 158, 11, 0.15)",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
   },
   aiBadgeText: {
     color: "#F59E0B",
-    fontSize: 10,
+    fontSize: 8,
     fontWeight: "800",
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
   feedbackPill: {
     flexDirection: "row",

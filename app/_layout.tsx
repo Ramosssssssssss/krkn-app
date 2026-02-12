@@ -9,6 +9,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 
 import FloatingAssistButton from "@/components/floating-assist-button";
+import GlobalFontScaler from "@/components/GlobalFontScaler";
 import { AssistiveProvider } from "@/context/assistive-context";
 import { AuthProvider } from "@/context/auth-context";
 import { LanguageProvider } from "@/context/language-context";
@@ -27,6 +28,7 @@ function RootLayoutNav() {
     <NavigationThemeProvider
       value={theme === "dark" ? DarkTheme : DefaultTheme}
     >
+      <GlobalFontScaler />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="(auth)" />

@@ -59,6 +59,19 @@ export default function PerfilScreen() {
     subtitle: "",
   });
 
+  // Password change
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPw, setShowCurrentPw] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
+  // Forgot password — supervisor override
+  const [forgotMode, setForgotMode] = useState(false);
+  const [supervisorPin, setSupervisorPin] = useState("");
+
   // Auto-cerrar modal de éxito después de 1.5 segundos
   useEffect(() => {
     if (showSuccessModal) {
@@ -279,6 +292,123 @@ export default function PerfilScreen() {
     } catch (error) {
       console.error("Error al guardar perfil:", error);
       return false;
+    }
+  };
+
+  // Cambiar contraseña
+  const handleChangePassword = async () => {
+    setPasswordError("");
+
+    // Modo supervisor (olvidé mi contraseña)
+    if (forgotMode) {
+      if (!supervisorPin.trim()) {
+        setPasswordError("Ingresa el PIN del supervisor");
+        return;
+      }
+      if (newPassword.length < 4) {
+        setPasswordError(
+          "La nueva contraseña debe tener al menos 4 caracteres",
+        );
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        setPasswordError("Las contraseñas no coinciden");
+        return;
+      }
+
+      setIsSavingPassword(true);
+      try {
+        const response = await fetch(
+          "https://app.krkn.mx/api/cambiar-password.php",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              companyCode,
+              usuarioId: user?.USUARIO_ID,
+              supervisorPin: supervisorPin,
+              newPassword: newPassword,
+            }),
+          },
+        );
+        const data = await response.json();
+        if (data.ok) {
+          setShowPasswordModal(false);
+          setCurrentPassword("");
+          setNewPassword("");
+          setConfirmPassword("");
+          setSupervisorPin("");
+          setForgotMode(false);
+          setSuccessMessage({
+            title: "¡Contraseña Actualizada!",
+            subtitle:
+              "Tu contraseña ha sido cambiada por autorización de supervisor.",
+          });
+          setShowSuccessModal(true);
+        } else {
+          setPasswordError(data.message || "Error al cambiar la contraseña");
+        }
+      } catch (error) {
+        console.error("Error al cambiar contraseña:", error);
+        setPasswordError("Error de conexión. Intenta de nuevo.");
+      } finally {
+        setIsSavingPassword(false);
+      }
+      return;
+    }
+
+    // Modo normal (con contraseña actual)
+    if (!currentPassword.trim()) {
+      setPasswordError("Ingresa tu contraseña actual");
+      return;
+    }
+    if (newPassword.length < 4) {
+      setPasswordError("La nueva contraseña debe tener al menos 4 caracteres");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("Las contraseñas no coinciden");
+      return;
+    }
+    if (newPassword === currentPassword) {
+      setPasswordError("La nueva contraseña debe ser diferente");
+      return;
+    }
+
+    setIsSavingPassword(true);
+    try {
+      const response = await fetch(
+        "https://app.krkn.mx/api/cambiar-password.php",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            companyCode,
+            usuarioId: user?.USUARIO_ID,
+            currentPassword: currentPassword,
+            newPassword: newPassword,
+          }),
+        },
+      );
+      const data = await response.json();
+      if (data.ok) {
+        setShowPasswordModal(false);
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+        setSuccessMessage({
+          title: "¡Contraseña Actualizada!",
+          subtitle: "Tu contraseña ha sido cambiada correctamente.",
+        });
+        setShowSuccessModal(true);
+      } else {
+        setPasswordError(data.message || "Error al cambiar la contraseña");
+      }
+    } catch (error) {
+      console.error("Error al cambiar contraseña:", error);
+      setPasswordError("Error de conexión. Intenta de nuevo.");
+    } finally {
+      setIsSavingPassword(false);
     }
   };
 
@@ -668,6 +798,17 @@ export default function PerfilScreen() {
         <TouchableOpacity
           style={[styles.secondaryButton, { borderColor: colors.border }]}
           activeOpacity={0.7}
+          onPress={() => {
+            setCurrentPassword("");
+            setNewPassword("");
+            setConfirmPassword("");
+            setPasswordError("");
+            setShowCurrentPw(false);
+            setShowNewPw(false);
+            setForgotMode(false);
+            setSupervisorPin("");
+            setShowPasswordModal(true);
+          }}
         >
           <Ionicons name="key-outline" size={18} color={colors.accent} />
           <Text style={[styles.secondaryButtonText, { color: colors.accent }]}>
@@ -858,6 +999,364 @@ export default function PerfilScreen() {
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
+      </Modal>
+
+      {/* Modal de cambio de contraseña */}
+      <Modal
+        visible={showPasswordModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPasswordModal(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.pwOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          <ScrollView
+            contentContainerStyle={styles.pwScrollContent}
+            bounces={false}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={[styles.pwCard, { backgroundColor: colors.surface }]}>
+              {/* Header */}
+              <View
+                style={[styles.pwHeader, { borderBottomColor: colors.border }]}
+              >
+                <View
+                  style={[
+                    styles.pwIconCircle,
+                    {
+                      backgroundColor: forgotMode
+                        ? "#FF9F0A15"
+                        : `${colors.accent}15`,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name={forgotMode ? "shield-checkmark" : "key"}
+                    size={24}
+                    color={forgotMode ? "#FF9F0A" : colors.accent}
+                  />
+                </View>
+                <Text style={[styles.pwTitle, { color: colors.text }]}>
+                  {forgotMode
+                    ? "Autorización de Supervisor"
+                    : "Cambiar Contraseña"}
+                </Text>
+                <Text
+                  style={[styles.pwSubtitle, { color: colors.textSecondary }]}
+                >
+                  {forgotMode
+                    ? "Un supervisor debe ingresar su PIN para autorizar el cambio"
+                    : "Ingresa tu contraseña actual y la nueva"}
+                </Text>
+              </View>
+
+              {/* Fields */}
+              <View style={styles.pwFields}>
+                {/* Current password OR Supervisor PIN */}
+                {forgotMode ? (
+                  <View>
+                    <Text style={[styles.pwFieldLabel, { color: "#FF9F0A" }]}>
+                      PIN de Supervisor
+                    </Text>
+                    <View
+                      style={[
+                        styles.pwInputRow,
+                        {
+                          backgroundColor: colors.background,
+                          borderColor:
+                            passwordError && !supervisorPin
+                              ? "#FF3B30"
+                              : "#FF9F0A40",
+                        },
+                      ]}
+                    >
+                      <Ionicons
+                        name="shield-checkmark-outline"
+                        size={18}
+                        color="#FF9F0A"
+                      />
+                      <TextInput
+                        style={[styles.pwInput, { color: colors.text }]}
+                        value={supervisorPin}
+                        onChangeText={(t) => {
+                          setSupervisorPin(t);
+                          setPasswordError("");
+                        }}
+                        placeholder="Ingresa el PIN"
+                        placeholderTextColor={colors.textTertiary}
+                        secureTextEntry
+                        autoCapitalize="none"
+                        keyboardType="number-pad"
+                        maxLength={8}
+                      />
+                      {supervisorPin.length >= 4 && (
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={20}
+                          color="#34C759"
+                        />
+                      )}
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setForgotMode(false);
+                        setSupervisorPin("");
+                        setPasswordError("");
+                      }}
+                      activeOpacity={0.6}
+                      style={{ marginTop: 8 }}
+                    >
+                      <Text
+                        style={{
+                          color: colors.accent,
+                          fontSize: 13,
+                          fontWeight: "500",
+                        }}
+                      >
+                        ← Usar mi contraseña actual
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View>
+                    <Text
+                      style={[
+                        styles.pwFieldLabel,
+                        { color: colors.textSecondary },
+                      ]}
+                    >
+                      Contraseña actual
+                    </Text>
+                    <View
+                      style={[
+                        styles.pwInputRow,
+                        {
+                          backgroundColor: colors.background,
+                          borderColor:
+                            passwordError && !currentPassword
+                              ? "#FF3B30"
+                              : colors.border,
+                        },
+                      ]}
+                    >
+                      <Ionicons
+                        name="lock-closed-outline"
+                        size={18}
+                        color={colors.textTertiary}
+                      />
+                      <TextInput
+                        style={[styles.pwInput, { color: colors.text }]}
+                        value={currentPassword}
+                        onChangeText={(t) => {
+                          setCurrentPassword(t);
+                          setPasswordError("");
+                        }}
+                        placeholder="••••••••"
+                        placeholderTextColor={colors.textTertiary}
+                        secureTextEntry={!showCurrentPw}
+                        autoCapitalize="none"
+                      />
+                      <TouchableOpacity
+                        onPress={() => setShowCurrentPw(!showCurrentPw)}
+                        activeOpacity={0.6}
+                      >
+                        <Ionicons
+                          name={
+                            showCurrentPw ? "eye-off-outline" : "eye-outline"
+                          }
+                          size={20}
+                          color={colors.textTertiary}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setForgotMode(true);
+                        setCurrentPassword("");
+                        setPasswordError("");
+                      }}
+                      activeOpacity={0.6}
+                      style={{ marginTop: 8 }}
+                    >
+                      <Text
+                        style={{
+                          color: "#FF9F0A",
+                          fontSize: 13,
+                          fontWeight: "500",
+                        }}
+                      >
+                        ¿Olvidaste tu contraseña?
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {/* New password */}
+                <View>
+                  <Text
+                    style={[
+                      styles.pwFieldLabel,
+                      { color: colors.textSecondary },
+                    ]}
+                  >
+                    Nueva contraseña
+                  </Text>
+                  <View
+                    style={[
+                      styles.pwInputRow,
+                      {
+                        backgroundColor: colors.background,
+                        borderColor:
+                          passwordError &&
+                          newPassword.length > 0 &&
+                          newPassword.length < 4
+                            ? "#FF3B30"
+                            : colors.border,
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      name="key-outline"
+                      size={18}
+                      color={colors.textTertiary}
+                    />
+                    <TextInput
+                      style={[styles.pwInput, { color: colors.text }]}
+                      value={newPassword}
+                      onChangeText={(t) => {
+                        setNewPassword(t);
+                        setPasswordError("");
+                      }}
+                      placeholder="Mínimo 4 caracteres"
+                      placeholderTextColor={colors.textTertiary}
+                      secureTextEntry={!showNewPw}
+                      autoCapitalize="none"
+                    />
+                    <TouchableOpacity
+                      onPress={() => setShowNewPw(!showNewPw)}
+                      activeOpacity={0.6}
+                    >
+                      <Ionicons
+                        name={showNewPw ? "eye-off-outline" : "eye-outline"}
+                        size={20}
+                        color={colors.textTertiary}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Confirm password */}
+                <View>
+                  <Text
+                    style={[
+                      styles.pwFieldLabel,
+                      { color: colors.textSecondary },
+                    ]}
+                  >
+                    Confirmar contraseña
+                  </Text>
+                  <View
+                    style={[
+                      styles.pwInputRow,
+                      {
+                        backgroundColor: colors.background,
+                        borderColor:
+                          passwordError &&
+                          confirmPassword &&
+                          confirmPassword !== newPassword
+                            ? "#FF3B30"
+                            : colors.border,
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      name="checkmark-circle-outline"
+                      size={18}
+                      color={
+                        confirmPassword && confirmPassword === newPassword
+                          ? "#34C759"
+                          : colors.textTertiary
+                      }
+                    />
+                    <TextInput
+                      style={[styles.pwInput, { color: colors.text }]}
+                      value={confirmPassword}
+                      onChangeText={(t) => {
+                        setConfirmPassword(t);
+                        setPasswordError("");
+                      }}
+                      placeholder="Repite la nueva contraseña"
+                      placeholderTextColor={colors.textTertiary}
+                      secureTextEntry={!showNewPw}
+                      autoCapitalize="none"
+                    />
+                    {confirmPassword.length > 0 &&
+                      confirmPassword === newPassword && (
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={20}
+                          color="#34C759"
+                        />
+                      )}
+                  </View>
+                </View>
+
+                {/* Error */}
+                {passwordError !== "" && (
+                  <View style={styles.pwErrorRow}>
+                    <Ionicons name="alert-circle" size={15} color="#FF3B30" />
+                    <Text style={styles.pwErrorTxt}>{passwordError}</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Buttons */}
+              <View
+                style={[styles.pwBtnRow, { borderTopColor: colors.border }]}
+              >
+                <TouchableOpacity
+                  style={[styles.pwBtn, { backgroundColor: colors.background }]}
+                  activeOpacity={0.7}
+                  onPress={() => setShowPasswordModal(false)}
+                >
+                  <Text
+                    style={[styles.pwBtnLabel, { color: colors.textSecondary }]}
+                  >
+                    Cancelar
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.pwBtn,
+                    {
+                      backgroundColor: colors.accent,
+                      opacity: isSavingPassword ? 0.6 : 1,
+                    },
+                  ]}
+                  activeOpacity={0.7}
+                  onPress={handleChangePassword}
+                  disabled={isSavingPassword}
+                >
+                  {isSavingPassword ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text
+                      style={[
+                        styles.pwBtnLabel,
+                        { color: "#fff", fontWeight: "700" },
+                      ]}
+                    >
+                      Guardar
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Modal de selección de avatar */}
@@ -1280,6 +1779,111 @@ const styles = StyleSheet.create({
   avatarModalCancelText: {
     fontSize: 16,
     fontWeight: "500",
+  },
+  // Estilos de cambio de contraseña
+  pwOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  pwScrollContent: {
+    flexGrow: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  pwCard: {
+    width: "100%",
+    maxWidth: 380,
+    borderRadius: 20,
+    overflow: "hidden",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 12 },
+        shadowOpacity: 0.25,
+        shadowRadius: 24,
+      },
+      android: { elevation: 12 },
+    }),
+  },
+  pwHeader: {
+    alignItems: "center",
+    paddingTop: 28,
+    paddingBottom: 20,
+    paddingHorizontal: 24,
+    borderBottomWidth: 1,
+  },
+  pwIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  pwTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    letterSpacing: -0.3,
+    marginBottom: 4,
+  },
+  pwSubtitle: {
+    fontSize: 13,
+    fontWeight: "500",
+    textAlign: "center",
+  },
+  pwFields: {
+    padding: 20,
+    gap: 16,
+  },
+  pwFieldLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: 6,
+    marginLeft: 2,
+  },
+  pwInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+  },
+  pwInput: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: "500",
+    padding: 0,
+  },
+  pwErrorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  pwErrorTxt: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#FF3B30",
+    flex: 1,
+  },
+  pwBtnRow: {
+    flexDirection: "row",
+    gap: 10,
+    padding: 20,
+    borderTopWidth: 1,
+  },
+  pwBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pwBtnLabel: {
+    fontSize: 16,
+    fontWeight: "600",
   },
   // Estilos del nuevo picker de avatares
   avatarPickerContainer: {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-const INACTIVITY_TIMEOUT = 45_000; // 45 seconds
+const INACTIVITY_TIMEOUT = 180_000; // 3 minutes
 
 /**
  * Hook that tracks user inactivity.

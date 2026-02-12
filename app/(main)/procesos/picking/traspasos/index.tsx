@@ -76,7 +76,7 @@ export default function TraspasosScreen() {
       } else {
         setTraspasos([]);
       }
-    } catch (e) {
+    } catch (_e) {
       setTraspasos([]);
     } finally {
       setLoading(false);
@@ -131,7 +131,7 @@ export default function TraspasosScreen() {
           message: data.message || "Error al tomar el traspaso.",
         });
       }
-    } catch (e) {
+    } catch (_e) {
       setAlert({
         visible: true,
         message: "Error de red al intentar tomar el traspaso.",

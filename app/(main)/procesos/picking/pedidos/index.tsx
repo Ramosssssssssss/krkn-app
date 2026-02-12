@@ -17,7 +17,7 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    View,
+    View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -154,7 +154,7 @@ export default function PedidosiPhoneXPScreen() {
           message: data.message || "Error al tomar el pedido.",
         });
       }
-    } catch (e) {
+    } catch (_e) {
       setAlert({
         visible: true,
         message: "Error de red al intentar tomar el pedido.",
@@ -325,7 +325,6 @@ export default function PedidosiPhoneXPScreen() {
                   {pedidos.length} pendientes
                 </Text>
               </View>
-              <View style={{ width: 40 }} />
             </View>
 
             {/* Search */}
