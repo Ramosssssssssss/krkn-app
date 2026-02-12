@@ -10,6 +10,9 @@ export interface ArticuloDetalle {
   _key: string;
   articuloId?: number;
   localizacion?: string;
+  precio?: number;
+  precioLista?: number;
+  precioDistribuidor?: number;
 }
 
 export type MovementType = 'entrada' | 'salida' | 'recepcion';

@@ -8,31 +8,31 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router, Stack, usePathname } from "expo-router";
 import React, {
-    createContext,
-    useCallback,
-    useContext,
-    useEffect,
-    useRef,
-    useState,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
 } from "react";
 import {
-    Dimensions,
-    PanResponder,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Dimensions,
+  PanResponder,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import Animated, {
-    Easing,
-    FadeIn,
-    interpolate,
-    runOnJS,
-    useAnimatedStyle,
-    useSharedValue,
-    withTiming,
+  Easing,
+  FadeIn,
+  interpolate,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -68,7 +68,8 @@ const menuItems: MenuItemType[] = [
 
   { name: "procesos", labelKey: "nav.processes", icon: "sync-outline" },
   { name: "reportes", labelKey: "nav.reports", icon: "document-text-outline" },
-  { name: "tableros", labelKey: "nav.boards", icon: "easel-outline" },
+  { name: "tableros", labelKey: "nav.boards", icon: "document-text-outline" },
+  { name: "pos", labelKey: "nav.pos", icon: "cash-outline" },
 ];
 
 // Contexto para el drawer
@@ -82,10 +83,10 @@ type DrawerContextType = {
 
 const DrawerContext = createContext<DrawerContextType>({
   isOpen: false,
-  openDrawer: () => {},
-  closeDrawer: () => {},
-  toggleDrawer: () => {},
-  triggerThemeFlash: () => {},
+  openDrawer: () => { },
+  closeDrawer: () => { },
+  toggleDrawer: () => { },
+  triggerThemeFlash: () => { },
 });
 
 export const useDrawer = () => useContext(DrawerContext);
@@ -200,58 +201,68 @@ function DrawerContent({
         <View style={styles.menuSection}>
           {menuItems.map((item, index) => {
             const active = isActive(item.name);
+            const isNewSection = item.name === "pos";
+
             return (
-              <Animated.View
-                key={`${item.name}-${renderKey}`}
-                entering={FadeIn.delay(80 + index * 40).duration(300)}
-              >
-                <TouchableOpacity
-                  style={[
-                    styles.menuItem,
-                    active && {
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.08)"
-                        : "rgba(0,0,0,0.04)",
-                    },
-                  ]}
-                  onPress={() => navigateTo(item.name)}
-                  activeOpacity={0.7}
+              <React.Fragment key={`${item.name}-${renderKey}`}>
+                {isNewSection && (
+                  <View style={styles.sectionHeader}>
+                    <Text style={[styles.sectionHeaderText, { color: colors.textTertiary }]}>
+                      {t("nav.new_section")}
+                    </Text>
+                  </View>
+                )}
+                <Animated.View
+                  entering={FadeIn.delay(80 + index * 40).duration(300)}
                 >
-                  {active && (
+                  <TouchableOpacity
+                    style={[
+                      styles.menuItem,
+                      active && {
+                        backgroundColor: isDark
+                          ? "rgba(255,255,255,0.08)"
+                          : "rgba(0,0,0,0.04)",
+                      },
+                    ]}
+                    onPress={() => navigateTo(item.name)}
+                    activeOpacity={0.7}
+                  >
+                    {active && (
+                      <View
+                        style={[
+                          styles.activeBar,
+                          { backgroundColor: colors.accent },
+                        ]}
+                      />
+                    )}
                     <View
                       style={[
-                        styles.activeBar,
-                        { backgroundColor: colors.accent },
+                        styles.menuIconBox,
+                        active && { backgroundColor: `${colors.accent}18` },
                       ]}
-                    />
-                  )}
-                  <View
-                    style={[
-                      styles.menuIconBox,
-                      active && { backgroundColor: `${colors.accent}18` },
-                    ]}
-                  >
-                    <Ionicons
-                      name={
-                        active
-                          ? (item.icon.replace("-outline", "") as any)
-                          : item.icon
-                      }
-                      size={20}
-                      color={active ? colors.accent : colors.textSecondary}
-                    />
-                  </View>
-                  <Text
-                    style={[
-                      styles.menuLabel,
-                      { color: active ? colors.text : colors.textSecondary },
-                      active && styles.menuLabelActive,
-                    ]}
-                  >
-                    {t(item.labelKey)}
-                  </Text>
-                </TouchableOpacity>
-              </Animated.View>
+                    >
+                      <Ionicons
+                        name={
+                          active
+                            ? (item.icon.replace("-outline", "") as any)
+                            : item.icon
+                        }
+                        size={20}
+                        color={active ? colors.accent : colors.textSecondary}
+                      />
+                    </View>
+                    <Text
+                      style={[
+                        styles.menuLabel,
+                        { color: active ? colors.text : colors.textSecondary },
+                        active && styles.menuLabelActive,
+                      ]}
+                    >
+                      {t(item.labelKey)}
+                    </Text>
+                  </TouchableOpacity>
+                </Animated.View>
+              </React.Fragment>
             );
           })}
         </View>
@@ -502,6 +513,7 @@ export default function MainLayout() {
             <Stack.Screen name="tableros" options={{ headerShown: false }} />
             <Stack.Screen name="control" options={{ headerShown: false }} />
             <Stack.Screen name="planeacion" options={{ headerShown: false }} />
+            <Stack.Screen name="pos" options={{ headerShown: false }} />
             <Stack.Screen
               name="configuracion"
               options={{ headerShown: false }}
@@ -699,5 +711,16 @@ const styles = StyleSheet.create({
   },
   logoutCircularButton: {
     backgroundColor: "rgba(255, 69, 58, 0.1)",
+  },
+  sectionHeader: {
+    paddingHorizontal: 14,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  sectionHeaderText: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 1,
+    textTransform: "uppercase",
   },
 });

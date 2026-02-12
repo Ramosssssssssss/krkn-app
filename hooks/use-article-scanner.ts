@@ -197,6 +197,9 @@ export function useArticleScanner(options?: ArticleScannerOptions) {
           cantidad: empaque,
           _key: `art-${Date.now()}`,
           articuloId: cachedProduct.ARTICULO_ID,
+          precio: cachedProduct.PRECIO || 0,
+          precioLista: cachedProduct.PRECIO_LISTA || 0,
+          precioDistribuidor: cachedProduct.PRECIO_DISTRIBUIDOR || 0,
         };
 
         setDetalles((prev) => [newItem, ...prev]);
@@ -227,7 +230,7 @@ export function useArticleScanner(options?: ArticleScannerOptions) {
             Alert.alert("Error", "No hay una base de datos seleccionada");
             return;
           }
-          url = `${API_CONFIG.BASE_URL}/api/articulos.php?busqueda=${encodeURIComponent(normalizedQuery)}&databaseId=${databaseId}&skipPrices=1`;
+          url = `${API_CONFIG.BASE_URL}/api/articulos.php?busqueda=${encodeURIComponent(normalizedQuery)}&databaseId=${databaseId}`;
         }
 
         const response = await fetch(url);
@@ -281,6 +284,9 @@ export function useArticleScanner(options?: ArticleScannerOptions) {
                   cantidad: empaque,
                   _key: `art-${Date.now()}`,
                   articuloId: articulo.ARTICULO_ID,
+                  precio: articulo.PRECIO || 0,
+                  precioLista: articulo.PRECIO_LISTA || 0,
+                  precioDistribuidor: articulo.PRECIO_DISTRIBUIDOR || 0,
                 };
                 return [newItem, ...prev];
               }
@@ -412,6 +418,9 @@ export function useArticleScanner(options?: ArticleScannerOptions) {
           UNIDAD_VENTA: item.umed || item.UNIDAD_VENTA,
           ARTICULO_ID: item.articuloId || item.ARTICULO_ID,
           CONTENIDO_EMPAQUE: item.contenido_empaque || item.CONTENIDO_EMPAQUE || 1,
+          PRECIO: item.precio || item.PRECIO || 0,
+          PRECIO_LISTA: item.precioLista || item.PRECIO_LISTA || 0,
+          PRECIO_DISTRIBUIDOR: item.precioDistribuidor || item.PRECIO_DISTRIBUIDOR || 0,
         });
       }
     });
@@ -449,6 +458,9 @@ export function useArticleScanner(options?: ArticleScannerOptions) {
           cantidad: empaque,
           _key: `art-${Date.now()}`,
           articuloId: articulo.ARTICULO_ID,
+          precio: articulo.PRECIO || 0,
+          precioLista: articulo.PRECIO_LISTA || 0,
+          precioDistribuidor: articulo.PRECIO_DISTRIBUIDOR || 0,
         };
         return [newItem, ...prev];
       }

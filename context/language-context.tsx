@@ -65,6 +65,8 @@ const translations: Record<Language, Record<string, string>> = {
     "nav.chats": "Chats",
     "nav.settings": "Configuración",
     "nav.logout": "Cerrar sesión",
+    "nav.new_section": "NUEVO 🔥",
+    "nav.pos": "Punto de Venta (POS)",
 
     // Settings
     "settings.title": "Configuración",
@@ -291,6 +293,8 @@ const translations: Record<Language, Record<string, string>> = {
     "nav.chats": "Chats",
     "nav.settings": "Settings",
     "nav.logout": "Log out",
+    "nav.new_section": "NEW 🔥",
+    "nav.pos": "Point of Sale (POS)",
 
     // Settings
     "settings.title": "Settings",
