@@ -1,11 +1,17 @@
+import { API_URL } from "@/config/api";
+import { useAuth } from "@/context/auth-context";
 import { useThemeColors } from "@/context/theme-context";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, Stack } from "expo-router";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
+    ActivityIndicator,
+    Alert,
     Animated,
+    Image,
     Platform,
     StyleSheet,
     Text,
@@ -31,6 +37,14 @@ const MENU_OPTIONS = [
     description: "Consulta las rutas activas y pendientes",
     color: "#10B981",   // verde
     gradient: ["#10B981", "#059669"] as [string, string],
+  },
+  {
+    id: "monitoreo-operadores",
+    icon: "people-circle" as const,
+    label: "Operadores",
+    description: "Monitoreo en tiempo real de conductores",
+    color: "#8B5CF6",   // violeta
+    gradient: ["#8B5CF6", "#7C3AED"] as [string, string],
   },
 ];
 
@@ -145,6 +159,10 @@ function MenuCard({
 export default function EmbarquesScreen() {
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const [isSpyMode, setIsSpyMode] = useState(false);
+  const [spyUrl, setSpyUrl] = useState<string | null>(null);
+  const spyInterval = useRef<any>(null);
 
   const headerFade = useRef(new Animated.Value(0)).current;
 
@@ -154,7 +172,77 @@ export default function EmbarquesScreen() {
       duration: 500,
       useNativeDriver: true,
     }).start();
+
+    checkCurrentSpyStatus();
+
+    return () => {
+      if (spyInterval.current) clearInterval(spyInterval.current);
+    };
   }, []);
+
+  const checkCurrentSpyStatus = async () => {
+    if (!user?.USUARIO_ID) return;
+    try {
+      const res = await fetch(`${API_URL}/api/surveillance-status.php?userId=${user.USUARIO_ID}`);
+      const data = await res.json();
+      if (data.success && data.active) {
+        setIsSpyMode(true);
+        startSpyInterval(user.USUARIO_ID);
+      }
+    } catch (e) {}
+  };
+
+  const toggleSpyMode = async () => {
+    if (!user?.USUARIO_ID) return;
+    const nextState = !isSpyMode;
+    
+    try {
+      // Para pruebas locales: si activamos spy, este cel es el objetivo
+      if (nextState) {
+        await AsyncStorage.setItem("@surveillance_test_uid", user.USUARIO_ID.toString());
+      } else {
+        await AsyncStorage.removeItem("@surveillance_test_uid");
+      }
+
+      const res = await fetch(`${API_URL}/api/surveillance-status.php`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.USUARIO_ID, active: nextState })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsSpyMode(nextState);
+        if (nextState) {
+          startSpyInterval(user.USUARIO_ID);
+        } else {
+          stopSpyInterval();
+        }
+      }
+    } catch (err) {
+      Alert.alert("Error", "No se pudo cambiar el modo de vigilancia.");
+    }
+  };
+
+  const startSpyInterval = (userId: number) => {
+    if (spyInterval.current) clearInterval(spyInterval.current);
+    spyInterval.current = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/surveillance.php?userId=${userId}`);
+        const data = await res.json();
+        if (data.success && data.url) {
+          setSpyUrl(data.url);
+        }
+      } catch (e) {}
+    }, 3000);
+  };
+
+  const stopSpyInterval = () => {
+    if (spyInterval.current) {
+      clearInterval(spyInterval.current);
+      spyInterval.current = null;
+    }
+    setSpyUrl(null);
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -219,6 +307,48 @@ export default function EmbarquesScreen() {
                 colors={colors}
               />
             ))}
+
+            {/* SPY CARD EXCLUSIVA */}
+            <TouchableOpacity
+              onPress={toggleSpyMode}
+              style={[
+                styles.card,
+                {
+                  backgroundColor: isSpyMode ? "#FF3B3010" : colors.surface,
+                  borderColor: isSpyMode ? "#FF3B30" : colors.border,
+                  marginTop: 8,
+                },
+              ]}
+            >
+              <View style={styles.cardLeft}>
+                <LinearGradient
+                  colors={isSpyMode ? ["#FF3B30", "#C41E3A"] : ["#5856D6", "#4A47A3"]}
+                  style={styles.iconBox}
+                >
+                  <Ionicons name={isSpyMode ? "eye-off" : "eye"} size={28} color="#fff" />
+                </LinearGradient>
+              </View>
+              <View style={styles.cardBody}>
+                <Text style={[styles.cardTitle, { color: isSpyMode ? "#FF3B30" : colors.text }]}>
+                  {isSpyMode ? "Detener Vigilancia Activa" : "Vigilancia de Dispositivo"}
+                </Text>
+                <Text style={[styles.cardDesc, { color: colors.textSecondary }]}>
+                  {isSpyMode ? "Transmitiendo cámara frontal en tiempo real" : "Activa la cámara frontal de este equipo"}
+                </Text>
+              </View>
+              {isSpyMode && <ActivityIndicator color="#FF3B30" size="small" />}
+            </TouchableOpacity>
+
+            {/* PREVIEW DEL FEED SI ESTÁ ACTIVO */}
+            {isSpyMode && spyUrl && (
+              <View style={[styles.spyPreview, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <Image source={{ uri: spyUrl }} style={styles.spyImage} />
+                <View style={styles.liveBadge}>
+                  <View style={styles.dot} />
+                  <Text style={styles.liveText}>LIVE: ESTE EQUIPO</Text>
+                </View>
+              </View>
+            )}
           </View>
         </View>
 
@@ -369,5 +499,43 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: 12,
     fontWeight: "500",
+  },
+
+  // Spy components
+  spyPreview: {
+    marginTop: 10,
+    borderRadius: 20,
+    overflow: "hidden",
+    borderWidth: StyleSheet.hairlineWidth,
+    aspectRatio: 16/9,
+    position: "relative",
+  },
+  spyImage: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#000",
+  },
+  liveBadge: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#FF3B30",
+  },
+  liveText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "800",
   },
 });

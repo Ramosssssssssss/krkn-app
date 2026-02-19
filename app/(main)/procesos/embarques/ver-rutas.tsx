@@ -7,6 +7,7 @@ import { router, Stack } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
+    Alert,
     Animated,
     FlatList,
     Platform,
@@ -42,6 +43,12 @@ interface Ruta {
   paradas: Parada[];
 }
 
+interface DriverInfo {
+  id_samsara: string;
+  nombre_completo: string;
+}
+
+
 // ─── Badge de estatus ─────────────────────────────────────────────────────────
 function EstatusBadge({ estatus, colors }: { estatus: string; colors: any }) {
   const config: Record<string, { color: string; label: string; icon: any }> = {
@@ -66,12 +73,14 @@ function RutaCard({
   index,
   expanded,
   onToggle,
+  onTomar,
 }: {
   ruta: Ruta;
   colors: any;
   index: number;
   expanded: boolean;
   onToggle: () => void;
+  onTomar?: (ruta: Ruta) => void;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -112,7 +121,16 @@ function RutaCard({
     <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }, { scale }] }}>
       <TouchableOpacity
         activeOpacity={0.9}
-        onPress={onToggle}
+        onPress={() => {
+          if (ruta.conductor === "POR TOMAR") {
+            router.push({
+              pathname: "/(main)/procesos/embarques/detalle-ruta-disponible",
+              params: { rutaId: ruta.ruta_id, nombreRuta: ruta.nombre_ruta }
+            });
+          } else {
+            onToggle();
+          }
+        }}
         style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
       >
         {/* ── Cabecera ── */}
@@ -185,7 +203,7 @@ function RutaCard({
         {/* ── Paradas expandidas ── */}
         {expanded && (
           <View style={[styles.paradasWrap, { borderTopColor: colors.border }]}>
-            {ruta.paradas.map((parada, idx) => (
+            {ruta.paradas.map((parada) => (
               <View
                 key={parada.det_id}
                 style={[styles.paradaRow, { borderBottomColor: colors.border }]}
@@ -221,6 +239,19 @@ function RutaCard({
                 </View>
               </View>
             ))}
+            
+            {ruta.conductor === "POR TOMAR" && (
+              <TouchableOpacity
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onTomar?.(ruta);
+                }}
+                style={[styles.tomarBtn, { backgroundColor: colors.accent }]}
+              >
+                <Ionicons name="hand-right-outline" size={18} color="#fff" />
+                <Text style={styles.tomarBtnText}>Tomar esta ruta</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
       </TouchableOpacity>
@@ -238,6 +269,8 @@ export default function VerRutasScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [filtroEstatus, setFiltroEstatus] = useState<"PENDIENTE" | "EN_RUTA" | "COMPLETADA" | "TODAS">("TODAS");
+  const [driverInfo, setDriverInfo] = useState<DriverInfo | null>(null);
+  const [taking, setTaking] = useState(false);
 
   const FILTROS = [
     { key: "TODAS",      label: "Todas" },
@@ -271,7 +304,56 @@ export default function VerRutasScreen() {
     }
   }, [filtroEstatus]);
 
-  useEffect(() => { fetchRutas(); }, [filtroEstatus]);
+  useEffect(() => {
+    (async () => {
+      const idS = await import("@react-native-async-storage/async-storage").then(m => m.default.getItem("id_samsara"));
+      const nom = await import("@react-native-async-storage/async-storage").then(m => m.default.getItem("nombre_completo"));
+      if (idS && nom) setDriverInfo({ id_samsara: idS, nombre_completo: nom });
+    })();
+    fetchRutas(); 
+  }, [filtroEstatus]);
+
+  const handleTomarRuta = async (ruta: Ruta) => {
+    if (!driverInfo) return Alert.alert("Error", "No se encontró información del conductor logueado.");
+
+    Alert.alert(
+      "Confirmar Asignación",
+      `¿Deseas tomar la ruta "${ruta.nombre_ruta}"?\n\nAl aceptarla, se enviará automáticamente a tu app de Samsara.`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Tomar Ruta",
+          onPress: async () => {
+            setTaking(true);
+            try {
+              const dbId = await getCurrentDatabaseId();
+              const res = await fetch(`${API_URL}/api/tomar-ruta.php`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  rutaId: ruta.ruta_id,
+                  driverId: driverInfo.id_samsara,
+                  nombreOperador: driverInfo.nombre_completo,
+                  databaseId: dbId,
+                }),
+              });
+              const data = await res.json();
+              if (data.success) {
+                Alert.alert("✓ Éxito", "La ruta ha sido asignada. Ya puedes verla en tu App de Samsara.");
+                fetchRutas();
+              } else {
+                throw new Error(data.error || "Error al tomar ruta.");
+              }
+            } catch (error: any) {
+              Alert.alert("Error", error.message);
+            } finally {
+              setTaking(false);
+            }
+          }
+        }
+      ]
+    );
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -380,9 +462,18 @@ export default function VerRutasScreen() {
               onToggle={() =>
                 setExpandedId(expandedId === item.ruta_id ? null : item.ruta_id)
               }
+              onTomar={handleTomarRuta}
             />
           )}
         />
+      )}
+
+      {/* Loading Overlay cuando está tomando una ruta */}
+      {taking && (
+        <View style={styles.takingOverlay}>
+          <ActivityIndicator size="large" color="#fff" />
+          <Text style={{ color: "#fff", marginTop: 15, fontWeight: "600" }}>Asignando y creando ruta en Samsara...</Text>
+        </View>
       )}
 
       {/* ── FAB nueva ruta ── */}
@@ -555,5 +646,26 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 6,
+  },
+  tomarBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 14,
+    marginTop: 15,
+  },
+  tomarBtnText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  takingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 9999,
   },
 });

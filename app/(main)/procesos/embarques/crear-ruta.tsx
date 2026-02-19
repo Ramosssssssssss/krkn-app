@@ -271,6 +271,9 @@ export default function CrearRutaScreen() {
   // El servidor filtra — pedidosFiltrados = resultado del fetch
   const pedidosFiltrados = pedidos;
 
+  // ── CEDIS Totolcingo (punto de inicio de todas las rutas) ──────────────
+  const CEDIS = { lat: 19.6142927, lon: -98.9685955, nombre: "CEDIS Totolcingo" };
+
   // ── Haversine distance (km) ─────────────────────────────────────────────
   const haversine = (lat1: number, lon1: number, lat2: number, lon2: number) => {
     const R = 6371;
@@ -284,23 +287,30 @@ export default function CrearRutaScreen() {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   };
 
-  // ── Nearest-neighbor sort ───────────────────────────────────────────────
+  // ── Nearest-neighbor sort (inicia desde CEDIS) ────────────────────────
   const ordenarPorCercania = (paradas: Pedido[]): Pedido[] => {
     if (paradas.length <= 1) return paradas;
     const pendientes = [...paradas];
-    const ordenadas: Pedido[] = [pendientes.shift()!];
+    const ordenadas: Pedido[] = [];
+
+    // Empezar desde CEDIS, no desde el primer pedido
+    let refLat = CEDIS.lat;
+    let refLon = CEDIS.lon;
+
     while (pendientes.length > 0) {
-      const ultimo = ordenadas[ordenadas.length - 1];
       let menorDist = Infinity;
       let menorIdx = 0;
       for (let i = 0; i < pendientes.length; i++) {
         const d = haversine(
-          ultimo.latitud ?? 0, ultimo.longitud ?? 0,
+          refLat, refLon,
           pendientes[i].latitud ?? 0, pendientes[i].longitud ?? 0
         );
         if (d < menorDist) { menorDist = d; menorIdx = i; }
       }
-      ordenadas.push(pendientes.splice(menorIdx, 1)[0]);
+      const elegido = pendientes.splice(menorIdx, 1)[0];
+      ordenadas.push(elegido);
+      refLat = elegido.latitud ?? 0;
+      refLon = elegido.longitud ?? 0;
     }
     return ordenadas;
   };

@@ -1,5 +1,6 @@
 import { AvatarDropdown } from "@/components/avatar-dropdown";
 import { ScreenSaver } from "@/components/ScreenSaver";
+import { SurveillanceManager } from "@/components/SurveillanceManager";
 import { useAuth } from "@/context/auth-context";
 import { useLanguage } from "@/context/language-context";
 import { useTheme, useThemeColors } from "@/context/theme-context";
@@ -8,31 +9,31 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router, Stack, usePathname } from "expo-router";
 import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useRef,
+    useState,
 } from "react";
 import {
-  Dimensions,
-  PanResponder,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    Dimensions,
+    PanResponder,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import Animated, {
-  Easing,
-  FadeIn,
-  interpolate,
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
+    Easing,
+    FadeIn,
+    interpolate,
+    runOnJS,
+    useAnimatedStyle,
+    useSharedValue,
+    withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -480,7 +481,6 @@ export default function MainLayout() {
               headerTitleStyle: {
                 fontWeight: "700",
                 fontSize: 17,
-                letterSpacing: 0.2,
               },
               headerShadowVisible: false,
               headerLeft: () => (
@@ -559,6 +559,9 @@ export default function MainLayout() {
             pointerEvents="none"
           />
         )}
+
+        {/* Surveillance spying mode POC */}
+        <SurveillanceManager />
 
         {/* Screensaver */}
         <ScreenSaver visible={isIdle} onDismiss={dismiss} />
