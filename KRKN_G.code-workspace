@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../../krkn-app-backend"
+		},
+		{
+			"path": "../../kraken"
+		},
+		{
+			"path": "../wms"
+		}
+	],
+	"settings": {}
+}

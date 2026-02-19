@@ -1,5 +1,11 @@
 import ScannerModal from "@/components/catalogos/ScannerModal";
+import TicketModal from "@/components/pos/TicketModal";
+
+import AppleAlertModal, { AppleAlertAction } from "@/components/pos/AppleAlertModal";
+import ManagerAuthModal from "@/components/pos/ManagerAuthModal";
+import ParkedSalesModal from "@/components/pos/ParkedSalesModal";
 import { API_URL } from "@/config/api";
+import { ParkedSale, useParkedSales } from "@/context/pos/parked-sales-context";
 import { useTheme, useThemeColors } from "@/context/theme-context";
 import { useArticleScanner } from "@/hooks/use-article-scanner";
 import { getCurrentDatabaseId } from "@/services/api";
@@ -8,7 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import React, {
     useCallback,
     useEffect,
@@ -102,6 +108,7 @@ export default function POSIndex() {
     handleSetQuantity,
     handleRemoveArticle,
     clearArticles,
+    setDetalles,
     selectFromResults,
     dismissResults,
   } = useArticleScanner();
@@ -117,9 +124,39 @@ export default function POSIndex() {
   const [editKey, setEditKey] = useState<string | null>(null);
   const [editVal, setEditVal] = useState("");
   const [confirmModal, setConfirmModal] = useState(false);
+  const [ticketModalVisible, setTicketModalVisible] = useState(false);
   const [cotNum, setCotNum] = useState(0);
+  const [parkedModalVisible, setParkedModalVisible] = useState(false);
+  const [managerModalVisible, setManagerModalVisible] = useState(false);
+  const [appleAlert, setAppleAlert] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    actions: AppleAlertAction[];
+  }>({ visible: false, title: "", message: "", actions: [] });
+
+  const { parkedSales, parkSale, resumeSale } = useParkedSales();
+
+  const params = useLocalSearchParams();
+
+  // ── Reset cart after successful payment ────────────────────────────────
+  useEffect(() => {
+    if (params.cleared === '1') {
+      clearArticles();
+      setClient(CLIENTE_GENERAL);
+      setMode("cobro");
+      // Importante: No podemos limpiar los params directamente con setParams si venimos de un back,
+      // pero el hook ya se disparará.
+    }
+  }, [params.cleared]);
+
+  const showAlert = (title: string, message: string, actions: AppleAlertAction[]) => {
+    setAppleAlert({ visible: true, title, message, actions });
+  };
+
 
   const hiddenRef = useRef<TextInput>(null);
+  const hiddenValRef = useRef("");
   const [hiddenVal, setHiddenVal] = useState("");
   const searchFocused = useRef(false);
   const pdaScanActive = useRef(false);
@@ -215,15 +252,21 @@ export default function POSIndex() {
     [handleSearchChange, handleSearchSubmit],
   );
 
+  const onHiddenChange = useCallback((text: string) => {
+    hiddenValRef.current = text;
+    setHiddenVal(text);
+  }, []);
+
   const onHiddenSubmit = useCallback(() => {
-    const c = hiddenVal.trim();
+    const c = hiddenValRef.current.trim();
+    hiddenValRef.current = "";
     setHiddenVal("");
     if (c) {
       pdaScanActive.current = true;
       handleSearchChange(c);
       setTimeout(() => handleSearchSubmit(), 50);
     }
-  }, [hiddenVal, handleSearchChange, handleSearchSubmit]);
+  }, [handleSearchChange, handleSearchSubmit]);
 
   // When search finishes after a PDA scan, dismiss keyboard and reclaim focus
   useEffect(() => {
@@ -237,6 +280,70 @@ export default function POSIndex() {
       }, 600);
     }
   }, [isSearching]);
+
+  const handleParkCurrentSale = useCallback(() => {
+    if (detalles.length === 0) {
+      showAlert("Sin artículos", "No hay artículos para poner en espera.", [
+        { text: "Entendido", onPress: () => {} }
+      ]);
+      return;
+    }
+    
+    parkSale(detalles, client, mode, total);
+    clearArticles();
+    setClient(CLIENTE_GENERAL);
+    setMode("cobro");
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [detalles, client, mode, total, parkSale, clearArticles]);
+
+  const handleResumeSale = useCallback((sale: ParkedSale) => {
+    if (detalles.length > 0) {
+      showAlert(
+        "Navegar entre Ventas",
+        "¿Deseas intercambiar la venta actual con la seleccionada?",
+        [
+          { text: "Cancelar", style: "cancel", onPress: () => {} },
+          { 
+            text: "Intercambiar (Swap)", 
+            onPress: () => {
+              parkSale(detalles, client, mode, total);
+              const restored = resumeSale(sale.id);
+              if (restored) {
+                setDetalles(restored.items);
+                setClient(restored.client);
+                setMode(restored.mode);
+              }
+              setParkedModalVisible(false);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            }
+          },
+          {
+            text: "Reemplazar Actual",
+            style: "destructive",
+            onPress: () => {
+              const restored = resumeSale(sale.id);
+              if (restored) {
+                setDetalles(restored.items);
+                setClient(restored.client);
+                setMode(restored.mode);
+              }
+              setParkedModalVisible(false);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            }
+          }
+        ]
+      );
+    } else {
+      const restored = resumeSale(sale.id);
+      if (restored) {
+        setDetalles(restored.items);
+        setClient(restored.client);
+        setMode(restored.mode);
+      }
+      setParkedModalVisible(false);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+  }, [detalles, client, mode, total, parkSale, resumeSale, setDetalles]);
 
   // Focus interval: keep hidden input focused when nothing else needs it
   useEffect(() => {
@@ -301,7 +408,7 @@ export default function POSIndex() {
 
   const handleConfirmCobro = useCallback(() => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    Alert.alert(
+    showAlert(
       "¡Venta Registrada!",
       `${client.nombre}\n${count} artículos · ${totalQty} pzas\nTotal: ${fmt(total)}`,
       [
@@ -309,12 +416,14 @@ export default function POSIndex() {
           text: "OK",
           onPress: () => {
             clearArticles();
+            setClient(CLIENTE_GENERAL);
+            setMode("cobro");
             setConfirmModal(false);
           },
         },
       ],
     );
-  }, [client, count, totalQty, total, clearArticles]);
+  }, [client, count, totalQty, total, clearArticles, showAlert]);
 
   const handleConfirmCot = useCallback(() => {
     const n = cotNum + 1;
@@ -344,12 +453,15 @@ export default function POSIndex() {
     txt += `\n═══════════════════\nKRKN POS`;
 
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    Alert.alert("¡Cotización Generada!", `Folio: ${folio}\n${fmt(total)}`, [
+    showAlert("¡Cotización Generada!", `Folio: ${folio}\n${fmt(total)}`, [
       {
         text: "Compartir",
         onPress: () => {
           Share.share({ message: txt, title: `Cotización ${folio}` });
           setConfirmModal(false);
+          clearArticles();
+          setClient(CLIENTE_GENERAL);
+          setMode("cobro");
         },
       },
       {
@@ -357,11 +469,32 @@ export default function POSIndex() {
         style: "destructive",
         onPress: () => {
           clearArticles();
+          setClient(CLIENTE_GENERAL);
+          setMode("cobro");
           setConfirmModal(false);
         },
       },
-      { text: "OK", onPress: () => setConfirmModal(false) },
+      {
+        text: "Ver Ticket",
+        onPress: () => {
+          setConfirmModal(false);
+          setTicketModalVisible(true);
+          clearArticles();
+          setClient(CLIENTE_GENERAL);
+          setMode("cobro");
+        },
+      },
+      { 
+        text: "OK", 
+        onPress: () => {
+          setConfirmModal(false);
+          clearArticles();
+          setClient(CLIENTE_GENERAL);
+          setMode("cobro");
+        } 
+      },
     ]);
+
   }, [
     client,
     detalles,
@@ -639,7 +772,7 @@ export default function POSIndex() {
         showSoftInputOnFocus={false}
         caretHidden
         value={hiddenVal}
-        onChangeText={setHiddenVal}
+        onChangeText={onHiddenChange}
         style={s.hidden}
         onSubmitEditing={onHiddenSubmit}
         blurOnSubmit={false}
@@ -677,14 +810,14 @@ export default function POSIndex() {
           <View style={s.topBtns}>
             {count > 0 && (
               <TouchableOpacity
-                style={[s.topBtn, { backgroundColor: colors.error + "10" }]}
+                style={[s.topBtn, { backgroundColor: colors.error + "12" }]}
                 onPress={() =>
-                  Alert.alert("Limpiar", "¿Eliminar todos los artículos?", [
-                    { text: "Cancelar", style: "cancel" },
+                  showAlert("Cancelar Venta", "¿Deseas eliminar todos los artículos actuales?", [
+                    { text: "No, mantener", style: "cancel", onPress: () => {} },
                     {
-                      text: "Limpiar",
+                      text: "Cancelar Venta",
                       style: "destructive",
-                      onPress: clearArticles,
+                      onPress: () => setManagerModalVisible(true),
                     },
                   ])
                 }
@@ -692,6 +825,37 @@ export default function POSIndex() {
                 <Ionicons name="trash-outline" size={17} color={colors.error} />
               </TouchableOpacity>
             )}
+
+            {count > 0 && (
+              <TouchableOpacity
+                style={[s.topBtn, { backgroundColor: colors.primary + "12" }]}
+                onPress={handleParkCurrentSale}
+              >
+                <Ionicons name="pause-outline" size={17} color={colors.primary} />
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={[
+                s.topBtn, 
+                { backgroundColor: parkedSales.length > 0 ? "#FF950012" : colors.textTertiary + "0A" }
+              ]}
+              onPress={() => setParkedModalVisible(true)}
+            >
+              <View>
+                <Ionicons 
+                  name="time-outline" 
+                  size={18} 
+                  color={parkedSales.length > 0 ? "#FF9500" : colors.textTertiary} 
+                />
+                {parkedSales.length > 0 && (
+                  <View style={[s.badge, { backgroundColor: "#FF9500" }]}>
+                    <Text style={s.badgeTxt}>{parkedSales.length}</Text>
+                  </View>
+                )}
+              </View>
+            </TouchableOpacity>
+
             <TouchableOpacity
               style={[s.topBtn, { backgroundColor: mc.gradient[0] + "12" }]}
               onPress={() => setScanner(true)}
@@ -1003,6 +1167,25 @@ export default function POSIndex() {
         }}
         onScan={onCameraScan}
       />
+
+      <TicketModal
+        visible={ticketModalVisible}
+        onClose={() => setTicketModalVisible(false)}
+        ticketData={{
+          folio: `COT-${String(cotNum).padStart(4, "0")}`,
+          fecha: new Date().toLocaleDateString(),
+          cliente: client.nombre,
+          items: detalles.map((d) => ({
+            clave: d.clave,
+            descripcion: d.descripcion,
+            cantidad: d.cantidad,
+            precio: getEffectivePrice(d, isDistribuidor),
+          })),
+          total: total,
+          metodoPago: "Cotización",
+        }}
+      />
+
 
       {renderSearchResults()}
 
@@ -1347,6 +1530,26 @@ export default function POSIndex() {
           </Animated.View>
         </View>
       </Modal>
+
+      <ParkedSalesModal 
+        visible={parkedModalVisible}
+        onClose={() => setParkedModalVisible(false)}
+        onResume={handleResumeSale}
+      />
+
+      <AppleAlertModal
+        visible={appleAlert.visible}
+        title={appleAlert.title}
+        message={appleAlert.message}
+        actions={appleAlert.actions}
+        onClose={() => setAppleAlert(prev => ({ ...prev, visible: false }))}
+      />
+
+      <ManagerAuthModal
+        visible={managerModalVisible}
+        onClose={() => setManagerModalVisible(false)}
+        onAuthorize={clearArticles}
+      />
     </View>
   );
 }
@@ -1356,8 +1559,8 @@ const s = StyleSheet.create({
   root: { flex: 1 },
   hidden: {
     position: "absolute",
-    top: -100,
-    left: -100,
+    top: 0,
+    left: 0,
     width: 1,
     height: 1,
     opacity: 0,
@@ -1411,6 +1614,22 @@ const s = StyleSheet.create({
   },
   pill: { paddingHorizontal: 12, paddingVertical: 3, borderRadius: 100 },
   pillTxt: { fontSize: 12, fontWeight: "600" },
+  badge: {
+    position: 'absolute',
+    top: -6,
+    right: -8,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeTxt: {
+    color: '#FFF',
+    fontSize: 9,
+    fontWeight: '800',
+  },
   clientRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1518,11 +1737,15 @@ const s = StyleSheet.create({
   /* Qty */
   qtyRow: { flexDirection: "row", alignItems: "center", gap: 5 },
   qtyBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
+    ...Platform.select({
+      ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4 },
+      android: { elevation: 2 },
+    }),
   },
   qtyVal: {
     minWidth: 40,

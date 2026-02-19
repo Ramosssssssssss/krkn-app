@@ -9,25 +9,25 @@ interface UseSucursalesAlmacenesReturn {
   sucursales: Sucursal[];
   almacenes: Almacen[];
   almacenesFiltrados: Almacen[];
-  
+
   // Selection
   selectedSucursal: number | null;
   selectedAlmacen: number | null;
   setSelectedSucursal: (id: number | null) => void;
   setSelectedAlmacen: (id: number | null) => void;
-  
+
   // State
   isLoading: boolean;
   error: string | null;
   retryCount: number;
-  
+
   // Actions
   refresh: () => void;
 }
 
 const MAX_RETRIES = 3;
 
-export function useSucursalesAlmacenes(): UseSucursalesAlmacenesReturn {
+export function useSucursalesAlmacenes(initialDatabaseId?: number): UseSucursalesAlmacenesReturn {
   const [rawData, setRawData] = useState<SucursalAlmacenRaw[]>([]);
   const [selectedSucursal, setSelectedSucursal] = useState<number | null>(null);
   const [selectedAlmacen, setSelectedAlmacen] = useState<number | null>(null);
@@ -43,7 +43,7 @@ export function useSucursalesAlmacenes(): UseSucursalesAlmacenesReturn {
     try {
       const data = await getSucursalesAlmacenes((attempt) => {
         setRetryCount(attempt);
-      });
+      }, initialDatabaseId);
 
       setRawData(data);
 

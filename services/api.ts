@@ -45,9 +45,9 @@ export async function apiRequest<T>(
 ): Promise<ApiResponse<T>> {
   const { method = "GET", body, headers = {} } = options;
 
-  // Agregar databaseId a la URL si está configurado
+  // Agregar databaseId a la URL si está configurado y no está ya presente
   let finalEndpoint = endpoint;
-  if (currentDatabaseId !== null) {
+  if (currentDatabaseId !== null && !endpoint.includes("databaseId=")) {
     const separator = endpoint.includes("?") ? "&" : "?";
     finalEndpoint = `${endpoint}${separator}databaseId=${currentDatabaseId}`;
   }

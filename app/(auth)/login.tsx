@@ -2,25 +2,30 @@ import { useAuth } from "@/context/auth-context";
 import { useTheme, useThemeColors } from "@/context/theme-context";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { BlurView } from "expo-blur";
+import { LinearGradient } from "expo-linear-gradient";
 import * as LocalAuthentication from "expo-local-authentication";
 import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { useVideoPlayer, VideoView } from "expo-video";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Animated,
+    KeyboardAvoidingView,
+    Platform,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 const FACE_ID_ENABLED_KEY = "@krkn_face_id_enabled";
 const FACE_ID_CREDENTIALS_KEY = "@krkn_face_id_credentials";
+
+const videoSource = require("@/assets/video.mp4");
 
 export default function LoginScreen() {
   const [username, setUsername] = useState("");
@@ -40,6 +45,13 @@ export default function LoginScreen() {
   const { companyCode, company, selectedDatabase, login } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const colors = useThemeColors();
+
+  // Video player
+  const player = useVideoPlayer(videoSource, (p) => {
+    p.loop = true;
+    p.muted = true;
+    p.play();
+  });
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -250,7 +262,29 @@ export default function LoginScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar style={isDark ? "light" : "dark"} />
+      <StatusBar style="light" />
+
+      {/* Video de fondo */}
+      <VideoView
+        player={player}
+        style={styles.video}
+        contentFit="cover"
+        nativeControls={false}
+      />
+
+      {/* Overlay de blur */}
+      <BlurView
+        intensity={Platform.OS === "ios" ? 20 : 10}
+        style={StyleSheet.absoluteFill}
+        tint="dark"
+      />
+
+      {/* Overlay oscuro y gradiente */}
+      <View style={styles.videoOverlay} />
+      <LinearGradient
+        colors={["rgba(8,5,13,0.6)", "rgba(13,9,18,0.8)", "rgba(8,5,13,0.9)"]}
+        style={StyleSheet.absoluteFill}
+      />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -263,9 +297,9 @@ export default function LoginScreen() {
             onPress={goBack}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
-            <Ionicons name="chevron-back" size={22} color={colors.text} />
+            <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={[styles.topBarTitle, { color: colors.textSecondary }]}>
+          <Text style={[styles.topBarTitle, { color: "rgba(255,255,255,0.7)" }]}>
             {companyCode?.toLowerCase()}.krkn.mx
           </Text>
           <TouchableOpacity
@@ -275,7 +309,7 @@ export default function LoginScreen() {
             <Ionicons
               name={isDark ? "sunny-outline" : "moon-outline"}
               size={18}
-              color={colors.textSecondary}
+              color="#FFFFFF"
             />
           </TouchableOpacity>
         </View>
@@ -291,8 +325,8 @@ export default function LoginScreen() {
           <Text style={[styles.brandLetter, { color: colors.accent }]}>
             {companyCode?.toUpperCase() || "KRKN"}
           </Text>
-          <Text style={[styles.title, { color: colors.text }]}>Bienvenido</Text>
-          <Text style={[styles.subtitle, { color: colors.textTertiary }]}>
+          <Text style={[styles.title, { color: "#FFFFFF" }]}>Bienvenido</Text>
+          <Text style={[styles.subtitle, { color: "rgba(255,255,255,0.6)" }]}>
             Ingresa para continuar
           </Text>
 
@@ -458,7 +492,7 @@ export default function LoginScreen() {
         </Animated.View>
 
         {/* Footer */}
-        <Text style={[styles.footer, { color: colors.textTertiary }]}>
+        <Text style={[styles.footer, { color: "rgba(255,255,255,0.4)" }]}>
           KRKN · v1.0
         </Text>
       </KeyboardAvoidingView>
@@ -469,6 +503,14 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  // Video
+  video: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  videoOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(8,5,13,0.4)",
   },
   flex: {
     flex: 1,

@@ -36,7 +36,7 @@ async function setupAndroidChannel() {
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 200, 100, 200],
       lightColor: "#3B82F6",
-      sound: "Aviso.wav",
+      sound: "default",
       enableLights: true,
       enableVibrate: true,
       showBadge: true,

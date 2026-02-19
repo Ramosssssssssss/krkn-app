@@ -163,6 +163,25 @@ const BluetoothModal = forwardRef<BluetoothModalRef, BluetoothModalProps>(({ vis
     };
 
     const startScan = async () => {
+        // Check Bluetooth state before scanning
+        try {
+            const manager = getBleManager();
+            const state = await manager.state();
+            setBleState(state);
+
+            if (state !== State.PoweredOn) {
+                Alert.alert(
+                    'Bluetooth Desactivado',
+                    'Prende el Bluetooth en los ajustes de tu dispositivo para buscar impresoras.',
+                    [{ text: 'OK' }]
+                );
+                setIsScanning(false);
+                return;
+            }
+        } catch (e) {
+            console.warn('BLE state check:', e);
+        }
+
         setIsScanning(true);
         setDevices([]);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -367,14 +386,25 @@ const BluetoothModal = forwardRef<BluetoothModalRef, BluetoothModalProps>(({ vis
     };
 
     const printToBleDevice = async (device: Device, printData: string): Promise<boolean> => {
-        // Force ZPL and Clean string
-        let cleanData = printData.replace(/[\r\n]+/g, '').trim();
-        
-        // Force ZPL command for Zebra
-        const forceZPL = `! U1 setvar "device.languages" "zpl"\r\n`;
-        const dataToPrint = forceZPL + cleanData;
+        // Detect data type
+        const isZPL = printData.includes('^XA') || printData.includes('^XZ');
+        const isESCPOS = printData.includes('\x1B') || printData.includes('\x1D');
 
+        let dataToPrint: string;
+
+        if (isZPL) {
+            // ZPL mode — clean newlines and force ZPL language for Zebra
+            let cleanData = printData.replace(/[\r\n]+/g, '').trim();
+            const forceZPL = `! U1 setvar "device.languages" "zpl"\r\n`;
+            dataToPrint = forceZPL + cleanData;
+        } else {
+            // Plain text or ESC/POS — send as-is (preserve newlines and control chars)
+            dataToPrint = printData;
+        }
+
+        // Encode to base64
         const base64Data = btoa(unescape(encodeURIComponent(dataToPrint)));
+
         const services = await device.services();
         let writeChar: any = null;
 
@@ -399,6 +429,7 @@ const BluetoothModal = forwardRef<BluetoothModalRef, BluetoothModalProps>(({ vis
         }
 
         const chunkSize = 100;
+        const chunkDelay = isZPL ? 5 : 20;
         const dataBytes = b64ToUint8Array(base64Data);
         
         for (let i = 0; i < dataBytes.length; i += chunkSize) {
@@ -411,7 +442,7 @@ const BluetoothModal = forwardRef<BluetoothModalRef, BluetoothModalProps>(({ vis
                 await writeChar.writeWithResponse(chunkBase64);
             }
             
-            await new Promise(resolve => setTimeout(resolve, 5));
+            await new Promise(resolve => setTimeout(resolve, chunkDelay));
         }
 
         return true;
@@ -425,27 +456,37 @@ const BluetoothModal = forwardRef<BluetoothModalRef, BluetoothModalProps>(({ vis
                 await device.connect();
             }
 
-            // 1. Clean ZPL: Remove newlines and extra spaces that can confuse older Zebra printers
-            let cleanData = printData.replace(/[\r\n]+/g, '').trim();
+            // Detect data type
+            const isZPL = printData.includes('^XA') || printData.includes('^XZ');
 
-            // 2. Force ZPL mode: Some mobile printers stay in CPCL mode. 
-            // This command tells it to interpret what follows as ZPL.
-            const forceZPL = `! U1 setvar "device.languages" "zpl"\r\n`;
-            
-            // 3. Send Force ZPL command first if it's a Zebra printer
-            if (device.name?.toLowerCase().includes('zebra') || 
-                device.name?.toLowerCase().includes('qln') ||
-                device.name?.toLowerCase().includes('evodio')) {
-                await device.write(forceZPL);
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
+            if (isZPL) {
+                // ZPL mode — clean and force ZPL language
+                let cleanData = printData.replace(/[\r\n]+/g, '').trim();
 
-            // 4. Send data in chunks
-            const chunkSize = 256; 
-            for (let i = 0; i < cleanData.length; i += chunkSize) {
-                const chunk = cleanData.slice(i, i + chunkSize);
-                await device.write(chunk);
-                await new Promise(resolve => setTimeout(resolve, 10));
+                // Force ZPL mode for Zebra printers
+                if (device.name?.toLowerCase().includes('zebra') || 
+                    device.name?.toLowerCase().includes('qln') ||
+                    device.name?.toLowerCase().includes('evodio')) {
+                    const forceZPL = `! U1 setvar "device.languages" "zpl"\r\n`;
+                    await device.write(forceZPL);
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+
+                // Send data in chunks
+                const chunkSize = 256; 
+                for (let i = 0; i < cleanData.length; i += chunkSize) {
+                    const chunk = cleanData.slice(i, i + chunkSize);
+                    await device.write(chunk);
+                    await new Promise(resolve => setTimeout(resolve, 10));
+                }
+            } else {
+                // Plain text or ESC/POS — send as-is (preserve newlines and control chars)
+                const chunkSize = 256;
+                for (let i = 0; i < printData.length; i += chunkSize) {
+                    const chunk = printData.slice(i, i + chunkSize);
+                    await device.write(chunk);
+                    await new Promise(resolve => setTimeout(resolve, 20));
+                }
             }
 
             return true;
@@ -454,6 +495,7 @@ const BluetoothModal = forwardRef<BluetoothModalRef, BluetoothModalProps>(({ vis
             throw error;
         }
     };
+
 
     // Helper functions for binary data
     const b64ToUint8Array = (b64: string) => {

@@ -102,6 +102,9 @@ const AVATAR_GRADIENTS = [
 const getAvatarColor = (id: number) =>
   AVATAR_GRADIENTS[id % AVATAR_GRADIENTS.length][0];
 
+const fmt_price = (n: number) =>
+  "$" + n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+
 // ─────────────────────────────────────────────────────────────────────────────
 export default function MisClientesScreen() {
   const colors = useThemeColors();
@@ -446,6 +449,42 @@ export default function MisClientesScreen() {
                   ) : null}
                 </View>
               )}
+
+              {/* Monthly Sales - NEW */}
+              <View style={st.detailSection}>
+                <View style={st.detailHeader}>
+                  <View
+                    style={[
+                      st.detailIconWrap,
+                      {
+                        backgroundColor: isDark
+                          ? "rgba(168,85,247,0.1)"
+                          : "rgba(168,85,247,0.06)",
+                      },
+                    ]}
+                  >
+                    <Ionicons name="stats-chart" size={14} color="#A855F7" />
+                  </View>
+                  <Text style={[st.detailLabel, { color: subtleText }]}>
+                    Ventas del Mes (Febrero)
+                  </Text>
+                </View>
+                <View style={st.salesRow}>
+                  <View style={st.salesInfo}>
+                    <Text style={[st.salesAmount, { color: colors.text }]}>
+                      {fmt_price(Math.random() * 5000 + 1000)}
+                    </Text>
+                    <Text style={[st.salesSub, { color: subtleText }]}>
+                      Meta: {fmt_price(10000)}
+                    </Text>
+                  </View>
+                  <View style={st.progressContainer}>
+                    <View style={[st.progressBar, { backgroundColor: isDark ? "rgba(168,85,247,0.15)" : "rgba(168,85,247,0.1)" }]}>
+                      <View style={[st.progressFill, { width: '45%', backgroundColor: '#A855F7' }]} />
+                    </View>
+                  </View>
+                </View>
+              </View>
             </Animated.View>
           )}
         </TouchableOpacity>
@@ -797,6 +836,38 @@ const st = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 2,
+  },
+  /* Sales Section */
+  salesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginTop: 4,
+  },
+  salesInfo: {
+    minWidth: 100,
+  },
+  salesAmount: {
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  salesSub: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  progressContainer: {
+    flex: 1,
+  },
+  progressBar: {
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 4,
   },
   statNumber: {
     fontSize: 22,

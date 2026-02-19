@@ -78,6 +78,7 @@ export function useReciboLogic() {
 
   // Escaneo
   const [lastScanResult, setLastScanResult] = useState<ScanResult | null>(null);
+  const [scannerValue, setScannerValue] = useState("");
   const entersCountRef = useRef(0);
 
   // Map de códigos para búsqueda instantánea O(1)
@@ -171,6 +172,13 @@ export function useReciboLogic() {
   const urgenciasDescartadasRef = useRef<Set<string>>(new Set());
   const urgenciasSilenciadasPorEscaneoRef = useRef<Set<string>>(new Set());
 
+  // Monitoreo de escaneo para scroll automático
+  const [lastScannedItem, setLastScannedItem] = useState<{
+    articuloId: number;
+    doctoId: number;
+    timestamp: number;
+  } | null>(null);
+
   // Actualizar el Map cuando cambian los detalles
   useEffect(() => {
     const map = new Map<string, { id: number; qty: number }>();
@@ -259,39 +267,38 @@ export function useReciboLogic() {
           return { success: true, pedidoCompleto: completado };
         }
 
-        // Para PEDIDO, verificar si está completo consultando detalle
-        const responseDetalle = await fetch(
-          `${API_URL}/api/detalle-apartado.php`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ databaseId, folio }),
-          },
-        );
+        // Para PEDIDO, el completado también viene en dataAsignar.data si el SP está actualizado
+        // Si no viene, usamos detalle-apartado pero solo si creemos que podría estar completo
+        let pedidoCompleto =
+          dataAsignar.data?.COMPLETADO ||
+          dataAsignar.data?.PEDIDO_COMPLETADO ||
+          false;
 
-        const dataDetalle = await responseDetalle.json();
-        console.log(
-          "[AUTO-ASIGNAR] Detalle apartado completo:",
-          JSON.stringify(dataDetalle, null, 2),
-        );
-        console.log("[AUTO-ASIGNAR] Resumen:", dataDetalle.resumen);
-        console.log(
-          "[AUTO-ASIGNAR] totalArticulosPendientes:",
-          dataDetalle.resumen?.totalArticulosPendientes,
-        );
-        console.log(
-          "[AUTO-ASIGNAR] totalUnidadesFaltantes:",
-          dataDetalle.resumen?.totalUnidadesFaltantes,
-        );
+        console.log("[AUTO-ASIGNAR] ¿Pedido completo inicial?:", pedidoCompleto);
 
-        // Verificar usando ambos campos para mayor robustez
-        const pendientes = dataDetalle.resumen?.totalArticulosPendientes ?? -1;
-        const unidadesFaltantes =
-          dataDetalle.resumen?.totalUnidadesFaltantes ?? -1;
+        // Si el backend no nos dijo si está completo, solo ahí consultamos el detalle
+        // para no saturar con una petición extra en cada escaneo
+        if (!pedidoCompleto) {
+          // Opcional: Podríamos decidir NO consultar el detalle aquí y confiar en el SP
+          // o consultar solo cada N escaneos. Por ahora, si no viene en la respuesta, 
+          // hacemos el fallback pero marcando por qué.
+          console.log("[AUTO-ASIGNAR] Backend no retornó completado, verificando por seguridad...");
+          const responseDetalle = await fetch(
+            `${API_URL}/api/detalle-apartado.php`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ databaseId, folio }),
+            },
+          );
 
-        // Si no hay pendientes, el pedido está completo
-        const pedidoCompleto =
-          dataDetalle.success && (pendientes === 0 || unidadesFaltantes === 0);
+          const dataDetalle = await responseDetalle.json();
+          if (dataDetalle.success) {
+            const pendientes = dataDetalle.resumen?.totalArticulosPendientes ?? -1;
+            const unidadesFaltantes = dataDetalle.resumen?.totalUnidadesFaltantes ?? -1;
+            pedidoCompleto = pendientes === 0 || unidadesFaltantes === 0;
+          }
+        }
 
         console.log("[AUTO-ASIGNAR] ¿Pedido completo?:", pedidoCompleto);
 
@@ -311,12 +318,7 @@ export function useReciboLogic() {
           const dataLiberar = await responseLiberar.json();
           console.log("[AUTO-ASIGNAR] Respuesta liberar:", dataLiberar);
         } else {
-          console.log(
-            "[AUTO-ASIGNAR] Faltan artículos. Pendientes:",
-            pendientes,
-            "Unidades faltantes:",
-            unidadesFaltantes,
-          );
+          console.log("[AUTO-ASIGNAR] Faltan artículos o no se realizó verificación.");
         }
 
         return { success: true, pedidoCompleto };
@@ -382,6 +384,7 @@ export function useReciboLogic() {
             pickerId: 1,
             almacenOrigenId: 188104,
             unidades: unidadesEscaneadas,
+            autoAssign: true, // <--- OPTIMIZACIÓN: Hacer todo en un viaje
           };
 
           const response = await fetch(`${API_URL}/api/consultar-destino.php`, {
@@ -411,6 +414,32 @@ export function useReciboLogic() {
 
         console.log("[DESTINO] RESULTADO:", resultado, "TIPO:", tipo, "Pendientes:", unidadesPendientes);
 
+        // Calcular split: cuántas van al apartado y cuántas sobran
+        const unidadesAApartado = Math.min(unidadesEscaneadas, unidadesPendientes);
+        const unidadesSobrantes = unidadesEscaneadas - unidadesAApartado;
+
+        console.log(`[DESTINO] Split: ${unidadesAApartado} al apartado, ${unidadesSobrantes} sobrantes`);
+
+        // NUEVO: El backend puede haber hecho la auto-asignación en un solo viaje
+        if (destinoData.AUTO_ASIGNADO_LOGRADO && unidadesAApartado > 0) {
+          console.log("[DESTINO] ⚡ Auto-asignación lograda en un solo viaje!");
+          const folioMostrar = tipo === "TRASPASO" ? `TRASPASO: ${folioSugerido}` : folioSugerido;
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          playSound("add");
+
+          // Nota: Aquí perdemos el flag de 'pedidoCompleto' que venía del detalle-apartado
+          // pero ganamos muchísima velocidad. Si es crítico, el SP debería retornarlo.
+          // Por ahora, asumimos éxito.
+          setArticuloAsignadoInfo({ clave: codigo.trim(), caja: cajaAsignada, folio: folioMostrar });
+          setShowArticuloAsignado(true);
+
+          return {
+            tieneDestino: true,
+            unidadesAsignadas: unidadesAApartado,
+            unidadesSobrantes,
+          };
+        }
+
         // Si es SOBRANTE, no tiene destino
         if (tipo === "NINGUNO" || resultado === "SOBRANTE") {
           articulosSinDestinoCache.current.set(codigoUpper, Date.now());
@@ -420,12 +449,6 @@ export function useReciboLogic() {
             unidadesSobrantes: unidadesEscaneadas,
           };
         }
-
-        // Calcular split: cuántas van al apartado y cuántas sobran
-        const unidadesAApartado = Math.min(unidadesEscaneadas, unidadesPendientes);
-        const unidadesSobrantes = unidadesEscaneadas - unidadesAApartado;
-
-        console.log(`[DESTINO] Split: ${unidadesAApartado} al apartado, ${unidadesSobrantes} sobrantes`);
 
         // AUTO_ASIGNADO: Ya hay caja asignada -> asignar automáticamente
         if (resultado === "AUTO_ASIGNADO" && cajaAsignada) {
@@ -509,12 +532,14 @@ export function useReciboLogic() {
       if (!databaseId || articulos.length === 0) return;
 
       // Recopilar únicamente las CLAVES principales (SKUs) de los artículos en pantalla
-      const codigos = articulos
-        .map((d) => d.CLAVE?.trim())
-        .filter(Boolean) as string[];
+      // Recopilar CLAVES y CODIGOS_BARRAS para que el cache cubra ambos
+      const codigos = new Set<string>();
+      articulos.forEach((d) => {
+        if (d.CLAVE) codigos.add(d.CLAVE.trim());
+        if (d.CODIGO_BARRAS) codigos.add(d.CODIGO_BARRAS.trim());
+      });
 
-      // Eliminar duplicados para tener el conteo real de SKUs únicos
-      const codigosUnicos = [...new Set(codigos)];
+      const codigosUnicos = Array.from(codigos);
       if (codigosUnicos.length === 0) return;
 
       console.log(
@@ -605,6 +630,11 @@ export function useReciboLogic() {
           setCodigosInner(innerCodes);
           setViewMode("detail");
           setOrdenes([]);
+          // Limpiar el estado previo por completo
+          setDevoluciones([]);
+          setIncidencias([]);
+          setBackorderIds(new Set());
+          setUnidadesApartado(new Map());
           // Limpiar órdenes combinadas al cargar nueva orden
           setCombinedOrders([]);
           // Limpiar cache bulk anterior
@@ -1032,6 +1062,15 @@ export function useReciboLogic() {
         );
         incrementarPorCodigo(code.trim(), resultado.unidadesAsignadas);
         incrementarUnidadesApartado(code.trim(), resultado.unidadesAsignadas);
+
+        // Disparar scroll hacia este artículo si existe en la orden
+        if (match) {
+          setLastScannedItem({
+            articuloId: match.id,
+            doctoId: 0, // En apartado no siempre sabemos la orden destino exacta aquí, pero match.id ayuda
+            timestamp: Date.now(),
+          });
+        }
       }
 
       // Si hay unidades sobrantes, procesarlas en la orden
@@ -1077,6 +1116,13 @@ export function useReciboLogic() {
           // Ahora actualizar solo el detalle objetivo
           return prev.map((d, index) => {
             if (index !== targetIndex) return d;
+
+            // Disparar scroll hacia este artículo
+            setLastScannedItem({
+              articuloId: d.ARTICULO_ID,
+              doctoId: d.doctoId || caratula?.DOCTO_CM_ID || 0,
+              timestamp: Date.now(),
+            });
 
             const devolucion = devoluciones.find(
               (dev) => dev.articuloId === d.ARTICULO_ID,
@@ -1166,6 +1212,13 @@ export function useReciboLogic() {
 
           return prev.map((d, index) => {
             if (index !== targetIndex) return d;
+
+            // Disparar scroll hacia este artículo
+            setLastScannedItem({
+              articuloId: d.ARTICULO_ID,
+              doctoId: d.doctoId || caratula?.DOCTO_CM_ID || 0,
+              timestamp: Date.now(),
+            });
 
             const devolucion = devoluciones.find(
               (dev) => dev.articuloId === d.ARTICULO_ID,
@@ -1776,30 +1829,35 @@ export function useReciboLogic() {
   );
 
   // Procesar texto del scanner PDA
-  // Ahora también llama a processScannedCode para verificar apartados/traspasos
+  // Ahora también limpia el input para evitar que se sature
   const processScannerText = useCallback(
     (text: string) => {
-      const enters = (text.match(/[\n\r]/g) || []).length;
-      const lastEnters = entersCountRef.current;
-
-      if (enters <= lastEnters) return;
-
-      const nuevos = enters - lastEnters;
-      entersCountRef.current = enters;
-
-      const lineas = text.split(/[\n\r]+/).filter((l) => l.trim());
-
-      // Procesar solo las nuevas líneas
-      const inicio = Math.max(0, lineas.length - nuevos);
-      for (let i = inicio; i < lineas.length; i++) {
-        const codigo = lineas[i].trim();
-        if (!codigo) continue;
-
-        // Llamar a processScannedCode para cada código
-        // Esto verificará apartados/traspasos igual que la cámara
-        console.log("[SCANNER PDA] Procesando código:", codigo);
-        processScannedCode(codigo);
+      // Si no hay saltos de línea, solo guardamos el progreso actual
+      if (!text.includes("\n") && !text.includes("\r")) {
+        setScannerValue(text);
+        return;
       }
+
+      // Separar por líneas (saltos de línea)
+      const lineas = text.split(/[\n\r]+/);
+
+      // La última parte puede ser un código incompleto que se sigue escribiendo
+      // Si el texto termina en salto de línea, procesamos todo.
+      // Si no, dejamos la última parte en el input.
+      const terminaEnSalto = /[\n\r]$/.test(text);
+      const completas = terminaEnSalto ? lineas : lineas.slice(0, -1);
+      const incompleta = terminaEnSalto ? "" : lineas[lineas.length - 1];
+
+      completas.forEach((linea) => {
+        const codigo = linea.trim();
+        if (codigo) {
+          console.log("[SCANNER PDA] Procesando código:", codigo);
+          processScannedCode(codigo);
+        }
+      });
+
+      // Limpiar el buffer pero dejar lo incompleto si existe
+      setScannerValue(incompleta);
     },
     [processScannedCode],
   );
@@ -1925,7 +1983,13 @@ export function useReciboLogic() {
       const draft = await loadDraft();
       if (draft) {
         setSavedDraft(draft);
-        setShowDraftModal(true);
+        // NO mostrar el modal si ya entramos directo a detalle (ej. por parámetros folio)
+        // Usamos un pequeño delay para asegurar que el viewMode se haya actualizado si hubo una búsqueda inmediata
+        setTimeout(() => {
+          if (stateRef.current.viewMode === "search") {
+            setShowDraftModal(true);
+          }
+        }, 500);
       }
     };
     checkDraft();
@@ -2187,6 +2251,8 @@ export function useReciboLogic() {
     discardDraft,
     lastScanResult,
     setLastScanResult,
+    scannerValue,
+    lastScannedItem,
     devoluciones,
     showSuccessModal,
     setShowSuccessModal,
@@ -2257,5 +2323,6 @@ export function useReciboLogic() {
     monitoreandoUrgencias,
     descartarUrgencias,
     precargandoDestinos,
+    playSound,
   };
 }

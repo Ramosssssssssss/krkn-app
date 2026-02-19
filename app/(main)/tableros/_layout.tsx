@@ -49,7 +49,18 @@ export default function TablerosLayout() {
           headerRight: () => <AvatarDropdown />,
         }} 
       />
-      <Stack.Screen name="oct/ordenes-compra" options={{ title: 'Órdenes de Compra' }} />
+      <Stack.Screen 
+        name="oct/ordenes-compra" 
+        options={{ 
+          headerShown: false 
+        }} 
+      />
+      <Stack.Screen 
+        name="oct/detalle" 
+        options={{ 
+          headerShown: false 
+        }} 
+      />
     </Stack>
   );
 }

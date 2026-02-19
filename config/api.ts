@@ -52,6 +52,7 @@ export const API_CONFIG = {
     ACTUALIZAR_ARTICULO_COMEX: "/api/actualizar-articulo-comex.php",
     CREAR_ARTICULO_COMEX: "/api/crear-articulo-comex.php",
     CATALOGOS_COMEX: "/api/get-catalogos-comex.php",
+    TABLEROS_ORDENES_COMPRA: "/api/tableros-ordenes-compra.php",
   },
 };
 

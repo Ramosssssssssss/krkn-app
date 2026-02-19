@@ -129,7 +129,7 @@ const ACTIONS: MenuAction[] = [
     icon: "receipt-outline",
     color: "#059669",
     bg: "#ECFDF5",
-    disabled: true,
+    route: "/(main)/pos/mis-ventas",
   },
   {
     key: "mis-clientes",

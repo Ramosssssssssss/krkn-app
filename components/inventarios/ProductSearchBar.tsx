@@ -153,7 +153,7 @@ const ProductSearchBar = forwardRef<TextInput, ProductSearchBarProps>(
             autoCapitalize="characters"
             autoCorrect={false}
             returnKeyType="search"
-            showSoftInputOnFocus={!aggressiveScan}
+            showSoftInputOnFocus={true}
             blurOnSubmit={false}
             selectTextOnFocus
           />

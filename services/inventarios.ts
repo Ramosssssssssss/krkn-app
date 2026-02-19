@@ -215,10 +215,15 @@ export interface DetalleInvfisResponse {
 // ============================================
 
 export async function getSucursalesAlmacenes(
-  onRetry?: (attempt: number) => void
+  onRetry?: (attempt: number) => void,
+  databaseId?: number,
 ): Promise<SucursalAlmacenRaw[]> {
+  const endpoint = databaseId
+    ? `${API_CONFIG.ENDPOINTS.SUCURSALES_ALMACENES}?databaseId=${databaseId}`
+    : API_CONFIG.ENDPOINTS.SUCURSALES_ALMACENES;
+
   const response = await apiRequestWithRetry<SucursalAlmacenRaw[]>(
-    '/api/sucursales-almacenes.php',
+    endpoint,
     { method: 'GET' },
     3,
     onRetry
@@ -293,7 +298,7 @@ export async function crearEntradaInventario(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      databaseId,
+      databaseId: (params as any).databaseId || databaseId,
       ...params,
     }),
   });
@@ -395,7 +400,7 @@ export async function crearSalidaInventario(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      databaseId,
+      databaseId: (params as any).databaseId || databaseId,
       ...params,
     }),
   });
@@ -501,7 +506,7 @@ export async function crearInventarioFisico(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      databaseId,
+      databaseId: (params as any).databaseId || databaseId,
       ...params,
     }),
   });

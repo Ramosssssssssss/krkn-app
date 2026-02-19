@@ -1,0 +1,222 @@
+{
+  "main": {
+    "id": "7147b0bb16980fa4",
+    "type": "split",
+    "children": [
+      {
+        "id": "365dec63cf627b33",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "ebc8fc2c4dcdfe81",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Welcome.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Welcome"
+            }
+          },
+          {
+            "id": "366d2d290b3c538b",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "COMANDOS EAS.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "COMANDOS EAS"
+            }
+          }
+        ],
+        "currentTab": 1
+      },
+      {
+        "id": "11f14c9083d2d529",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "f612096153fa0186",
+            "type": "leaf",
+            "state": {
+              "type": "graph",
+              "state": {},
+              "icon": "lucide-git-fork",
+              "title": "Graph view"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "0260982ee26250e8",
+    "type": "split",
+    "children": [
+      {
+        "id": "c984744b3e3b4382",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "3f74bdcfd7f9e3b0",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "ae7e58aa5e5e1a6f",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "214cfc93bdb93194",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "ee1a56144f207ab3",
+    "type": "split",
+    "children": [
+      {
+        "id": "a6a025ca55c1ed7e",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "81ca158242356d05",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "COMANDOS EAS.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for COMANDOS EAS"
+            }
+          },
+          {
+            "id": "0ba4918821fee52f",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "COMANDOS EAS.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from COMANDOS EAS"
+            }
+          },
+          {
+            "id": "421e18f19707bf51",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "929c838780d75031",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "11139184f169f892",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "COMANDOS EAS.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of COMANDOS EAS"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "366d2d290b3c538b",
+  "lastOpenFiles": [
+    "Welcome.md",
+    "COMANDOS EAS.md"
+  ]
+}

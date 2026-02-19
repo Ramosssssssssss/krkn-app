@@ -87,6 +87,7 @@ export interface ArticleCardReciboProps {
   isBackorder?: boolean;
   onBackorder: (articuloId: number) => void;
   onSwipeOpen?: (articuloId: number) => void;
+  isHighlighted?: boolean;
 }
 
 // Datos del modal de éxito

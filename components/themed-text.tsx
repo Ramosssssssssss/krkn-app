@@ -1,5 +1,6 @@
 import { StyleSheet, Text, type TextProps } from 'react-native';
 
+import { useFontScale } from '@/context/theme-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
 
 export type ThemedTextProps = TextProps & {
@@ -16,16 +17,23 @@ export function ThemedText({
   ...rest
 }: ThemedTextProps) {
   const color = useThemeColor({ light: lightColor, dark: darkColor }, 'text');
+  const fs = useFontScale();
+
+  // Escalar el estilo base según el tipo
+  const getBaseStyle = () => {
+    const base = (styles as any)[type] || styles.default;
+    return {
+      ...base,
+      fontSize: fs(base.fontSize),
+      lineHeight: base.lineHeight ? fs(base.lineHeight) : undefined,
+    };
+  };
 
   return (
     <Text
       style={[
         { color },
-        type === 'default' ? styles.default : undefined,
-        type === 'title' ? styles.title : undefined,
-        type === 'defaultSemiBold' ? styles.defaultSemiBold : undefined,
-        type === 'subtitle' ? styles.subtitle : undefined,
-        type === 'link' ? styles.link : undefined,
+        getBaseStyle(),
         style,
       ]}
       {...rest}

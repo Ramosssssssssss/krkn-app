@@ -50,6 +50,7 @@ export function ArticleCardPicking({
 }: ArticleCardPickingProps) {
   const [showQtyModal, setShowQtyModal] = useState(false);
   const [localQty, setLocalQty] = useState(item.SURTIDAS.toString());
+  const [imgError, setImgError] = useState(false);
   const databaseId = getCurrentDatabaseId();
 
   const isComplete = item.SURTIDAS >= item.UNIDADES;
@@ -81,15 +82,31 @@ export function ArticleCardPicking({
           { backgroundColor: colors.background },
         ]}
       >
-        <Image
-          source={
-            item.IMAGEN_BASE64
-              ? { uri: `data:image/jpeg;base64,${item.IMAGEN_BASE64}` }
-              : { uri: imageUrl || "" }
-          }
-          style={styles.heroImage}
-          resizeMode="contain"
-        />
+        {!imgError && (item.IMAGEN_BASE64 || imageUrl) ? (
+          <Image
+            source={
+              item.IMAGEN_BASE64
+                ? { uri: `data:image/jpeg;base64,${item.IMAGEN_BASE64}` }
+                : { uri: imageUrl || "" }
+            }
+            style={styles.heroImage}
+            resizeMode="contain"
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          <View
+            style={[
+              styles.heroImage,
+              { justifyContent: "center", alignItems: "center" },
+            ]}
+          >
+            <Ionicons
+              name="cube-outline"
+              size={120}
+              color={colors.textTertiary || "#9CA3AF"}
+            />
+          </View>
+        )}
 
         {/* Location Badge Floating */}
         <View
@@ -207,7 +224,9 @@ export function ArticleCardPicking({
                 backgroundColor: isComplete
                   ? "#D1D5DB"
                   : item.CONFIRMADO
-                    ? "#6B7280"
+                    ? item.SURTIDAS === 0
+                      ? "#F59E0B" // Naranja si confirmó 0 para que se note
+                      : "#6B7280"
                     : "#10B981",
                 shadowColor: isComplete ? "transparent" : "#10B981",
               },
@@ -215,17 +234,19 @@ export function ArticleCardPicking({
             onPress={() => !isLocked && !isComplete && onConfirm()}
             disabled={isLocked || isComplete}
           >
-            <Ionicons
-              name={
-                isComplete
-                  ? "checkmark-done-circle"
-                  : item.CONFIRMADO
-                    ? "refresh-outline"
-                    : "checkmark"
-              }
-              size={26}
-              color={isComplete ? "#9CA3AF" : "#fff"}
-            />
+              <Ionicons
+                name={
+                  isComplete
+                    ? "checkmark-done-circle"
+                    : item.CONFIRMADO
+                      ? item.SURTIDAS === 0
+                        ? "alert-circle-outline"
+                        : "refresh-outline"
+                      : "checkmark"
+                }
+                size={26}
+                color={isComplete ? "#9CA3AF" : "#fff"}
+              />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -338,6 +359,61 @@ export function ArticleCardPicking({
             <Text style={styles.lockInstruction}>
               Escanea el código del pasillo para desbloquear este artículo
             </Text>
+          </View>
+        </View>
+      )}
+
+      {/* Overlay de Confirmado / Completado */}
+      {!isLocked && item.CONFIRMADO && (
+        <View style={styles.confirmedOverlay}>
+          <BlurView
+            intensity={95}
+            style={StyleSheet.absoluteFill}
+            tint="systemMaterialDark"
+          />
+          <View style={styles.confirmedContent}>
+            <View
+              style={[
+                styles.confirmedCircle,
+                {
+                  backgroundColor:
+                    item.SURTIDAS === 0 ? "#F59E0B" : "#10B981",
+                },
+              ]}
+            >
+              <Ionicons
+                name={
+                  item.SURTIDAS === 0
+                    ? "alert-outline"
+                    : "checkmark-done-outline"
+                }
+                size={40}
+                color="#fff"
+              />
+            </View>
+            <Text
+              style={[
+                styles.confirmedTitle,
+                { color: item.SURTIDAS === 0 ? "#F59E0B" : "#10B981" },
+              ]}
+            >
+              {item.SURTIDAS === 0
+                ? "CONFIRMADO EN CERO"
+                : isComplete
+                  ? "COMPLETADO"
+                  : "CONFIRMADO PARCIAL"}
+            </Text>
+            <Text style={styles.confirmedSub}>
+              {item.SURTIDAS} de {item.UNIDADES} piezas surtidas
+            </Text>
+
+            <TouchableOpacity
+              style={styles.editBtnOverlay}
+              onPress={onConfirm}
+            >
+              <Ionicons name="pencil" size={16} color="#fff" />
+              <Text style={styles.editBtnText}>EDITAR</Text>
+            </TouchableOpacity>
           </View>
         </View>
       )}
@@ -576,5 +652,57 @@ const styles = StyleSheet.create({
     paddingHorizontal: 30,
     lineHeight: 18,
     fontWeight: "600",
+  },
+  confirmedOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 900,
+    borderRadius: 20,
+    overflow: "hidden",
+  },
+  confirmedContent: {
+    alignItems: "center",
+  },
+  confirmedCircle: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 15,
+    shadowColor: "#000",
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  confirmedTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+  confirmedSub: {
+    color: "rgba(255,255,255,0.8)",
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 20,
+  },
+  editBtnOverlay: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.3)",
+  },
+  editBtnText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 1,
   },
 });

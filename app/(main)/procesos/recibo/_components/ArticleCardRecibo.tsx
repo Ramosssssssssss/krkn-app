@@ -5,6 +5,7 @@ import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import React, {
     forwardRef,
+    useEffect,
     useImperativeHandle,
     useRef,
     useState,
@@ -12,6 +13,7 @@ import React, {
 import {
     ActivityIndicator,
     Alert,
+    Animated,
     Image,
     Modal,
     Text,
@@ -48,15 +50,44 @@ export const ArticleCardRecibo = forwardRef<
       isBackorder,
       onBackorder,
       onSwipeOpen,
+      isHighlighted,
     },
     ref,
   ) => {
     const swipeableRef = useRef<Swipeable>(null);
+    const pulseAnim = useRef(new Animated.Value(1)).current;
     const [showQtyModal, setShowQtyModal] = useState(false);
     const [showImageModal, setShowImageModal] = useState(false);
     const [localQty, setLocalQty] = useState(item.cantidadEscaneada.toString());
     const [isProcessing, setIsProcessing] = useState(false);
     const databaseId = getCurrentDatabaseId();
+
+    // Efecto de parpadeo infinito para el ítem resaltado
+    useEffect(() => {
+      if (isHighlighted) {
+        const pulse = Animated.loop(
+          Animated.sequence([
+            Animated.timing(pulseAnim, {
+              toValue: 0.6,
+              duration: 500,
+              useNativeDriver: true,
+            }),
+            Animated.timing(pulseAnim, {
+              toValue: 1,
+              duration: 500,
+              useNativeDriver: true,
+            }),
+          ]),
+        );
+        pulse.start();
+        return () => {
+          pulse.stop();
+          pulseAnim.setValue(1);
+        };
+      } else {
+        pulseAnim.setValue(1);
+      }
+    }, [isHighlighted]);
 
     // Exponer método close al padre
     useImperativeHandle(ref, () => ({
@@ -133,8 +164,16 @@ export const ArticleCardRecibo = forwardRef<
           dragOffsetFromRightEdge={15}
           onSwipeableWillOpen={() => onSwipeOpen?.(item.ARTICULO_ID)}
         >
-          <View
-            style={[styles.articleCard, { backgroundColor: colors.surface }]}
+          <Animated.View
+            style={[
+              styles.articleCard,
+              {
+                backgroundColor: colors.surface,
+                opacity: pulseAnim,
+                borderWidth: isHighlighted ? 2 : 0,
+                borderColor: isHighlighted ? colors.accent : "transparent",
+              },
+            ]}
           >
             {/* Indicador de incidencia */}
             {tieneIncidencia && (
@@ -340,7 +379,7 @@ export const ArticleCardRecibo = forwardRef<
                 </Text>
               </View>
             </View>
-          </View>
+          </Animated.View>
         </Swipeable>
 
         {/* Modal para ajustar cantidad */}

@@ -377,6 +377,74 @@ export function SkeletonArticleCatalogList({ count = 8 }: { count?: number }) {
   );
 }
 
+// ━━━ PRESET: OCT Card List (Dashboard) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Two-column layout: Info (folio, name, meta) + QR side
+
+function SkeletonOCTCard() {
+  const colors = useThemeColors();
+  return (
+    <View style={[presets.octCard, { backgroundColor: colors.surface }]}>
+      <View style={{ flexDirection: 'row', gap: 20 }}>
+        {/* Info Side */}
+        <View style={{ flex: 1, justifyContent: 'center' }}>
+          <Bone width={90} height={24} radius={8} />
+          <Bone width="90%" height={22} radius={4} style={{ marginTop: 16 }} />
+          <View style={{ marginTop: 18, gap: 10 }}>
+            <Bone width={120} height={14} radius={4} />
+            <Bone width={100} height={14} radius={4} />
+          </View>
+        </View>
+        {/* QR Side */}
+        <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+          <Bone width={100} height={100} radius={18} />
+          <Bone width={60} height={10} radius={4} style={{ marginTop: 10 }} />
+        </View>
+      </View>
+      {/* Footer footer */}
+      <View style={{ marginTop: 18, paddingTop: 16, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, flexDirection: 'row', alignItems: 'center' }}>
+        <Bone width={150} height={12} radius={4} />
+      </View>
+    </View>
+  );
+}
+
+export function SkeletonOCTList({ count = 3 }: { count?: number }) {
+  return (
+    <View style={{ gap: 16 }}>
+      {Array.from({ length: count }).map((_, i) => (
+        <SkeletonOCTCard key={i} />
+      ))}
+    </View>
+  );
+}
+
+// ━━━ PRESET: OCT Detail List ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// List rows with clave, qty and multiline description
+
+function SkeletonOCTDetailCard() {
+  const colors = useThemeColors();
+  return (
+    <View style={[presets.octDetailCard, { backgroundColor: colors.surface }]}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
+        <Bone width={100} height={16} radius={4} />
+        <Bone width={60} height={20} radius={4} />
+      </View>
+      <Bone width="100%" height={14} radius={4} />
+      <Bone width="70%" height={14} radius={4} style={{ marginTop: 8 }} />
+    </View>
+  );
+}
+
+export function SkeletonOCTDetailList({ count = 5 }: { count?: number }) {
+  return (
+    <View style={{ gap: 12 }}>
+      {Array.from({ length: count }).map((_, i) => (
+        <SkeletonOCTDetailCard key={i} />
+      ))}
+    </View>
+  );
+}
+
 // ━━━ Styles ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 const presets = StyleSheet.create({
@@ -425,5 +493,17 @@ const presets = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     gap: 12,
+  },
+  octCard: {
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  octDetailCard: {
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
 });

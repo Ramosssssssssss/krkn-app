@@ -8,7 +8,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
     Animated,
     Dimensions,
     Image,
@@ -22,6 +21,30 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, G } from "react-native-svg";
+
+// ==================== COMPONENTES DE CARGA (SKELETON) ====================
+const Skeleton = ({ width, height, style }: any) => {
+  const colors = useThemeColors();
+  const pulseAnim = useRef(new Animated.Value(0.4)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 0.8, duration: 800, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 0.4, duration: 800, useNativeDriver: true }),
+      ])
+    ).start();
+  }, [pulseAnim]);
+
+  return (
+    <Animated.View
+      style={[
+        { width, height, backgroundColor: colors.border, borderRadius: 8, opacity: pulseAnim },
+        style,
+      ]}
+    />
+  );
+};
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -102,15 +125,22 @@ export default function PickingHomeScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [metricsLoading, setMetricsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [metrics, setMetrics] = useState<PickerMetrics | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
 
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim1 = useRef(new Animated.Value(0)).current;
+  const fadeAnim2 = useRef(new Animated.Value(0)).current;
+  const fadeAnim3 = useRef(new Animated.Value(0)).current;
+  const slideAnim1 = useRef(new Animated.Value(15)).current;
+  const slideAnim2 = useRef(new Animated.Value(15)).current;
+  const slideAnim3 = useRef(new Animated.Value(15)).current;
 
   const fetchMetrics = useCallback(async () => {
     try {
+      setMetricsLoading(true);
       const databaseId = getCurrentDatabaseId();
       const pikerId = (user as any)?.PIKER_ID || user?.USUARIO_ID || 1;
       const response = await fetch(`${API_URL}/api/picking-metrics.php`, {
@@ -131,30 +161,35 @@ export default function PickingHomeScreen() {
           detalle: data.detalle,
         });
       }
-    } catch (e) { console.error(e); } finally { setLoading(false); }
+    } catch (e) { console.error(e); } finally { setMetricsLoading(false); }
   }, [user]);
 
   useEffect(() => { fetchMetrics(); }, [fetchMetrics]);
 
   useEffect(() => {
-    if (!loading) {
-      Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
+    if (!metricsLoading) {
+      Animated.stagger(120, [
+        Animated.parallel([
+          Animated.timing(fadeAnim1, { toValue: 1, duration: 400, useNativeDriver: true }),
+          Animated.timing(slideAnim1, { toValue: 0, duration: 400, useNativeDriver: true }),
+        ]),
+        Animated.parallel([
+          Animated.timing(fadeAnim2, { toValue: 1, duration: 400, useNativeDriver: true }),
+          Animated.timing(slideAnim2, { toValue: 0, duration: 400, useNativeDriver: true }),
+        ]),
+        Animated.parallel([
+          Animated.timing(fadeAnim3, { toValue: 1, duration: 400, useNativeDriver: true }),
+          Animated.timing(slideAnim3, { toValue: 0, duration: 400, useNativeDriver: true }),
+        ]),
+      ]).start();
     }
-  }, [loading]);
+  }, [metricsLoading]);
 
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchMetrics();
     setRefreshing(false);
   };
-
-  if (loading) {
-    return (
-      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="small" color={colors.accent} />
-      </View>
-    );
-  }
 
   const rankLabel = metrics?.rank ? (metrics.rank === 1 ? 'LÍDER' : metrics.rank <= 3 ? 'TOP 3' : `RANK #${metrics.rank}`) : 'PENDIENTE';
   const rankColor = metrics?.rank && metrics.rank <= 1 ? '#FFD700' : colors.accent;
@@ -179,98 +214,180 @@ export default function PickingHomeScreen() {
       >
         {/* CAROUSEL SECTION (User Info -> Stats) */}
         <View style={styles.carouselContainer}>
-          <ScrollView
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onScroll={(e) => {
-              const x = e.nativeEvent.contentOffset.x;
-              setActiveIndex(Math.round(x / (SCREEN_WIDTH - 32)));
-            }}
-            scrollEventThrottle={16}
-          >
-            {/* PAGE 1: USER INFO */}
-            <View style={[styles.carouselPage, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-               <View style={styles.userPageContent}>
-                  <View style={styles.userPageTop}>
-                     <Image source={{ uri: user?.AVATAR_URL || "https://via.placeholder.com/100" }} style={[styles.bigAvatar, { borderColor: colors.border }]} />
-                     <View style={styles.userPageInfo}>
-                        <Text style={[styles.userPageName, { color: colors.text }]}>{user?.NOMBRE || "Picker"}</Text>
-                        <Text style={[styles.userPageId, { color: colors.textSecondary }]}>ID: {(user as any)?.PIKER_ID || user?.USUARIO_ID}</Text>
-                        <View style={[styles.rankTag, { backgroundColor: rankColor + '15' }]}>
-                           <Text style={[styles.rankTagText, { color: rankColor }]}>{rankLabel}</Text>
+          {metricsLoading && !metrics ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              scrollEnabled={false}
+            >
+              {/* SKELETON PAGE 1 */}
+              <View style={[styles.carouselPage, { backgroundColor: colors.surface, borderColor: colors.border, width: SCREEN_WIDTH - 32, marginRight: 12 }]}>
+                <View style={styles.userPageContent}>
+                    <View style={styles.userPageTop}>
+                      <Skeleton width={70} height={70} style={{ borderRadius: 35 }} />
+                      <View style={styles.userPageInfo}>
+                          <Skeleton width="80%" height={24} style={{ marginBottom: 6 }} />
+                          <Skeleton width="40%" height={14} style={{ marginBottom: 8 }} />
+                          <Skeleton width="30%" height={18} style={{ borderRadius: 6 }} />
+                      </View>
+                    </View>
+                    <View style={styles.userPageStats}>
+                      <View style={styles.uStat}><Skeleton width={40} height={20} /><Skeleton width={50} height={10} style={{ marginTop: 4 }} /></View>
+                      <View style={styles.uStat}><Skeleton width={40} height={20} /><Skeleton width={50} height={10} style={{ marginTop: 4 }} /></View>
+                      <View style={styles.uStat}><Skeleton width={40} height={20} /><Skeleton width={50} height={10} style={{ marginTop: 4 }} /></View>
+                    </View>
+                </View>
+              </View>
+              {/* SKELETON PAGE 2 */}
+              <View style={[styles.carouselPage, { backgroundColor: colors.surface, borderColor: colors.border, width: SCREEN_WIDTH - 32 }]}>
+                <View style={styles.statsPageContent}>
+                    <View style={styles.statsLeft}>
+                      <Skeleton width={100} height={10} style={{ marginBottom: 8 }} />
+                      <Skeleton width={120} height={32} style={{ marginBottom: 8 }} />
+                      <Skeleton width={80} height={12} />
+                    </View>
+                    <View style={styles.statsRight}>
+                      <Skeleton width={90} height={90} style={{ borderRadius: 45 }} />
+                    </View>
+                </View>
+              </View>
+            </ScrollView>
+          ) : (
+            <>
+              <ScrollView
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onScroll={(e) => {
+                  const x = e.nativeEvent.contentOffset.x;
+                  setActiveIndex(Math.round(x / (SCREEN_WIDTH - 32)));
+                }}
+                scrollEventThrottle={16}
+              >
+                <Animated.View 
+                  key="page1"
+                  style={[styles.carouselPage, { backgroundColor: colors.surface, borderColor: colors.border, opacity: fadeAnim1, transform: [{ translateY: slideAnim1 }] }]}
+                >
+                  <View style={styles.userPageContent}>
+                      <View style={styles.userPageTop}>
+                        <Image source={{ uri: user?.AVATAR_URL || "https://via.placeholder.com/100" }} style={[styles.bigAvatar, { borderColor: colors.border }]} />
+                        <View style={styles.userPageInfo}>
+                            <Text style={[styles.userPageName, { color: colors.text }]}>{user?.NOMBRE || "Picker"}</Text>
+                            <Text style={[styles.userPageId, { color: colors.textSecondary }]}>ID: {(user as any)?.PIKER_ID || user?.USUARIO_ID}</Text>
+                            <View style={[styles.rankTag, { backgroundColor: rankColor + '15' }]}>
+                              <Text style={[styles.rankTagText, { color: rankColor }]}>{rankLabel}</Text>
+                            </View>
                         </View>
-                     </View>
-                  </View>
-                  <View style={styles.userPageStats}>
-                     <View style={styles.uStat}>
-                        <Text style={[styles.uStatVal, { color: colors.text }]}>{metrics?.totalUnidades}</Text>
-                        <Text style={[styles.uStatLabel, { color: colors.textTertiary }]}>Unidades</Text>
-                     </View>
-                     <View style={[styles.vSep, { backgroundColor: colors.border }]} />
-                     <View style={styles.uStat}>
-                        <Text style={[styles.uStatVal, { color: colors.text }]}>{metrics?.totalPartidas}</Text>
-                        <Text style={[styles.uStatLabel, { color: colors.textTertiary }]}>Partidas</Text>
-                     </View>
-                     <View style={[styles.vSep, { backgroundColor: colors.border }]} />
-                     <View style={styles.uStat}>
-                        <Text style={[styles.uStatVal, { color: colors.text }]}>#{metrics?.rank || '-'}</Text>
-                        <Text style={[styles.uStatLabel, { color: colors.textTertiary }]}>Rank</Text>
-                     </View>
-                  </View>
-               </View>
-            </View>
-
-            {/* PAGE 2: DASHBOARD RING */}
-            <View style={[styles.carouselPage, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-               <View style={styles.statsPageContent}>
-                  <View style={styles.statsLeft}>
-                     <Text style={[styles.statsLabel, { color: colors.textTertiary }]}>PUNTAJE SEMANAL</Text>
-                     <Text style={[styles.statsValue, { color: colors.text }]}>{metrics?.totalScore.toLocaleString()}</Text>
-                     <Text style={[styles.statsSub, { color: colors.accent }]}>PROGRESO ACTUAL</Text>
-                  </View>
-                  <View style={styles.statsRight}>
-                     <View style={styles.ringContainer}>
-                        <ActivityRing size={90} strokeWidth={10} progress={70} color={colors.accent} backgroundColor={colors.border} />
-                        <View style={styles.ringCenter}>
-                           <Ionicons name="trending-up" size={20} color={colors.accent} />
+                      </View>
+                      <View style={styles.userPageStats}>
+                        <View style={styles.uStat}>
+                            <Text style={[styles.uStatVal, { color: colors.text }]}>{metrics?.totalUnidades}</Text>
+                            <Text style={[styles.uStatLabel, { color: colors.textTertiary }]}>Unidades</Text>
                         </View>
-                     </View>
+                        <View style={[styles.vSep, { backgroundColor: colors.border }]} />
+                        <View style={styles.uStat}>
+                            <Text style={[styles.uStatVal, { color: colors.text }]}>{metrics?.totalPartidas}</Text>
+                            <Text style={[styles.uStatLabel, { color: colors.textTertiary }]}>Partidas</Text>
+                        </View>
+                        <View style={[styles.vSep, { backgroundColor: colors.border }]} />
+                        <View style={styles.uStat}>
+                            <Text style={[styles.uStatVal, { color: colors.text }]}>#{metrics?.rank || '-'}</Text>
+                            <Text style={[styles.uStatLabel, { color: colors.textTertiary }]}>Rank</Text>
+                        </View>
+                      </View>
                   </View>
-               </View>
-            </View>
-          </ScrollView>
+                </Animated.View>
 
-          {/* DOTS INDICATOR */}
-          <View style={styles.dotsRow}>
-            {[0, 1].map((i) => (
-              <View key={i} style={[styles.dot, { backgroundColor: i === activeIndex ? colors.accent : colors.border }]} />
-            ))}
-          </View>
+                {/* PAGE 2: DASHBOARD RING */}
+                <Animated.View 
+                   key="page2"
+                   style={[styles.carouselPage, { backgroundColor: colors.surface, borderColor: colors.border, opacity: fadeAnim1, transform: [{ translateY: slideAnim1 }] }]}
+                >
+                  <View style={styles.statsPageContent}>
+                      <View style={styles.statsLeft}>
+                        <Text style={[styles.statsLabel, { color: colors.textTertiary }]}>PUNTAJE SEMANAL</Text>
+                        <Text style={[styles.statsValue, { color: colors.text }]}>{metrics?.totalScore.toLocaleString()}</Text>
+                        <Text style={[styles.statsSub, { color: colors.accent }]}>PROGRESO ACTUAL</Text>
+                      </View>
+                      <View style={styles.statsRight}>
+                        <View style={styles.ringContainer}>
+                            <ActivityRing size={90} strokeWidth={10} progress={70} color={colors.accent} backgroundColor={colors.border} />
+                            <View style={styles.ringCenter}>
+                              <Ionicons name="trending-up" size={20} color={colors.accent} />
+                            </View>
+                        </View>
+                      </View>
+                  </View>
+                </Animated.View>
+              </ScrollView>
+
+              {/* DOTS INDICATOR */}
+              <View style={styles.dotsRow}>
+                {[0, 1].map((i) => (
+                  <View key={i} style={[styles.dot, { backgroundColor: i === activeIndex ? colors.accent : colors.border }]} />
+                ))}
+              </View>
+            </>
+          )}
         </View>
 
         {/* DISTRIBUTION GRAPH */}
-        <Animated.View style={[styles.section, { opacity: fadeAnim }]}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Resumen por Área</Text>
-          <View style={[styles.contentCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <DistributionChart data={metrics?.detalle} colors={colors} />
-          </View>
-        </Animated.View>
-
-        {/* WEEKLY TREND */}
-        <Animated.View style={[styles.section, { opacity: fadeAnim }]}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Actividad Diaria</Text>
-          <View style={[styles.trendCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <View style={styles.barsContainer}>
-              {[30, 50, 40, 70, 60, 45, 85].map((h, i) => (
-                <View key={i} style={styles.barWrap}>
-                  <View style={[styles.bar, { height: h, backgroundColor: i === 6 ? colors.accent : colors.accent + '25' }]} />
-                  <Text style={[styles.barLabel, { color: colors.textTertiary }]}>{['L','M','M','J','V','S','D'][i]}</Text>
+        {metricsLoading && !metrics ? (
+          <View style={styles.section}>
+            <Skeleton width={180} height={24} style={{ marginBottom: 12, marginLeft: 4 }} />
+            <View style={[styles.contentCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+               <View style={styles.chartContainer}>
+                  {[1, 2, 3].map(i => (
+                    <View key={i} style={styles.chartRow}>
+                      <View style={styles.chartLabelRow}>
+                        <Skeleton width={80} height={12} />
+                        <Skeleton width={40} height={12} />
+                      </View>
+                      <Skeleton width="100%" height={8} style={{ borderRadius: 4 }} />
+                    </View>
+                  ))}
                 </View>
-              ))}
             </View>
           </View>
-        </Animated.View>
+        ) : (
+          <Animated.View style={[styles.section, { opacity: fadeAnim2, transform: [{ translateY: slideAnim2 }] }]}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Resumen por Área</Text>
+            <View style={[styles.contentCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <DistributionChart data={metrics?.detalle} colors={colors} />
+            </View>
+          </Animated.View>
+        )}
+
+        {/* WEEKLY TREND */}
+        {metricsLoading && !metrics ? (
+          <View style={styles.section}>
+            <Skeleton width={160} height={24} style={{ marginBottom: 12, marginLeft: 4 }} />
+            <View style={[styles.trendCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={styles.barsContainer}>
+                {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+                  <View key={i} style={styles.barWrap}>
+                    <Skeleton width={22} height={40 + Math.random() * 40} style={{ borderRadius: 5 }} />
+                    <Skeleton width={12} height={10} style={{ marginTop: 6 }} />
+                  </View>
+                ))}
+              </View>
+            </View>
+          </View>
+        ) : (
+          <Animated.View style={[styles.section, { opacity: fadeAnim3, transform: [{ translateY: slideAnim3 }] }]}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Actividad Diaria</Text>
+            <View style={[styles.trendCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <View style={styles.barsContainer}>
+                  {[30, 50, 40, 70, 60, 45, 85].map((h, i) => (
+                    <View key={i} style={styles.barWrap}>
+                      <View style={[styles.bar, { height: h, backgroundColor: i === 6 ? colors.accent : colors.accent + '25' }]} />
+                      <Text style={[styles.barLabel, { color: colors.textTertiary }]}>{['L','M','M','J','V','S','D'][i]}</Text>
+                    </View>
+                  ))}
+                </View>
+            </View>
+          </Animated.View>
+        )}
 
         <View style={styles.footer}>
           <Text style={[styles.footerText, { color: colors.textTertiary }]}>

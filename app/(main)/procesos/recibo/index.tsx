@@ -5,15 +5,16 @@ import { useThemeColors } from "@/context/theme-context";
 import { useSystemSounds } from "@/hooks/use-system-sounds";
 import { getCurrentDatabaseId } from "@/services/api";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCameraPermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, {
     useCallback,
     useEffect,
     useMemo,
     useRef,
-    useState,
+    useState
 } from "react";
 import {
     ActivityIndicator,
@@ -56,9 +57,42 @@ export default function ReciboScreen() {
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const params = useLocalSearchParams<{ folio?: string }>();
 
   // Hook con toda la lógica de negocio
   const logic = useReciboLogic();
+
+  // Efecto para buscar folio cuando viene de parámetros (ej. desde el tablero de OCT)
+  useEffect(() => {
+    if (params.folio) {
+      console.log("[RECIBO] Folio recibido por parámetros:", params.folio);
+
+      const checkAndFetch = async () => {
+        try {
+          // Intentar ver si hay un borrador que coincida
+          const draftData = await AsyncStorage.getItem("@recibo_draft_v1");
+          if (draftData) {
+            const draft = JSON.parse(draftData);
+            const folioDraft = draft.caratula?.FOLIO || draft.caratula?.FOLIO_DISPLAY;
+            if (folioDraft === params.folio) {
+              console.log("[RECIBO] Coincidencia con borrador, restaurando...");
+              logic.restoreDraft(draft);
+              return;
+            }
+          }
+        } catch (e) {
+          console.warn("[RECIBO] Error al verificar borrador inicial:", e);
+        }
+
+        // Si no hay borrador o no coincide, buscar normalmente
+        logic.setSearchQuery(params.folio as string);
+        logic.buscarOrdenes(params.folio as string);
+      };
+
+      checkAndFetch();
+    }
+  }, [params.folio]);
+
   const { playSound } = useSystemSounds();
 
   // Assistive Touch & Camera
@@ -114,6 +148,10 @@ export default function ReciboScreen() {
   // Ref para input de escaneo
   const scanInputRef = useRef<TextInput>(null);
 
+  // Refs para listas (auto-scroll)
+  const sectionListRef = useRef<SectionList>(null);
+  const flatListRef = useRef<FlatList>(null);
+
   // Refs para cerrar swipeables anteriores
   const swipeableRefs = useRef<Map<number, ArticleCardReciboHandle>>(new Map());
   const openSwipeableId = useRef<number | null>(null);
@@ -131,6 +169,7 @@ export default function ReciboScreen() {
   // Estado para saber si el modal de éxito actual es de una individual
   const [fueRecepcionIndividual, setFueRecepcionIndividual] = useState(false);
 
+  // ==================== RECEPCIÓN INDIVIDUAL LOGIC ====================
   const handleRecibirIndividualConfirm = async () => {
     if (!ordenARecibirIndividual) return;
 
@@ -200,7 +239,10 @@ export default function ReciboScreen() {
     // Si ya existe un intervalo, no crear otro (evita encimamiento)
     if (soundIntervalRef.current) return;
 
-    // Reproducir cada 4 segundos (un poco más de espacio para evitar saturar)
+    // Reproducir cada 4 segundos
+    soundIntervalRef.current = setInterval(() => {
+      logic.playSound("warning");
+    }, 4000);
 
     return () => {
       if (soundIntervalRef.current) {
@@ -208,7 +250,7 @@ export default function ReciboScreen() {
         soundIntervalRef.current = null;
       }
     };
-  }, [logic.urgencias.length, playSound]);
+  }, [logic.urgencias.length, logic.playSound]);
 
   // Cuando se detecta un artículo con apartado, ir directo a selección de caja
   useEffect(() => {
@@ -317,6 +359,75 @@ export default function ReciboScreen() {
     logic.isBackorder,
     logic.getCantidadDevolucion,
   ]);
+
+  // ==================== AUTO-SCROLL AL ESCANEAR ====================
+  useEffect(() => {
+    if (!logic.lastScannedItem || logic.viewMode !== "detail") return;
+
+    const { articuloId, doctoId } = logic.lastScannedItem;
+
+    if (articulosSections) {
+      // ==== CASO SECTION LIST (Órdenes Combinadas) ====
+      let sectionIndex = -1;
+      let itemIndex = -1;
+
+      for (let s = 0; s < articulosSections.length; s++) {
+        const section = articulosSections[s];
+        // Buscamos el artículo que coincida con ID y Documento
+        const found = section.data.findIndex(
+          (item: DetalleArticulo) =>
+            item.ARTICULO_ID === articuloId &&
+            (doctoId === 0 ||
+              (item.doctoId || logic.caratula?.DOCTO_CM_ID) === doctoId),
+        );
+
+        if (found !== -1) {
+          sectionIndex = s;
+          itemIndex = found;
+          break;
+        }
+      }
+
+      if (sectionIndex !== -1 && itemIndex !== -1) {
+        console.log(
+          `[SCROLL] Scrolled to Section: ${sectionIndex}, Item: ${itemIndex}`,
+        );
+        setTimeout(() => {
+          sectionListRef.current?.scrollToLocation({
+            sectionIndex,
+            itemIndex,
+            animated: true,
+            viewPosition: 0.5, // Centrar en la pantalla
+          });
+        }, 100);
+      }
+    } else {
+      // ==== CASO FLAT LIST (Orden Sencilla) ====
+      const index = logic.detalles.findIndex(
+        (item) => item.ARTICULO_ID === articuloId,
+      );
+      if (index !== -1) {
+        console.log(`[SCROLL] Scrolled to Index: ${index}`);
+        setTimeout(() => {
+          flatListRef.current?.scrollToIndex({
+            index,
+            animated: true,
+            viewPosition: 0.5,
+          });
+        }, 100);
+      }
+    }
+  }, [logic.lastScannedItem, articulosSections, logic.viewMode]);
+
+  // Asegurar que el input de escaneo tenga foco al entrar a detalle
+  useEffect(() => {
+    if (logic.viewMode === "detail") {
+      const timer = setTimeout(() => {
+        scanInputRef.current?.focus();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [logic.viewMode]);
 
   // Handler para el scanner de cámara
   const handleCameraScan = useCallback(
@@ -692,6 +803,12 @@ export default function ReciboScreen() {
         cantidadDevolucion={logic.getCantidadDevolucion(item.ARTICULO_ID)}
         isBackorder={logic.isBackorder(item.ARTICULO_ID)}
         onSwipeOpen={handleSwipeOpen}
+        isHighlighted={
+          logic.lastScannedItem?.articuloId === item.ARTICULO_ID &&
+          (logic.lastScannedItem?.doctoId === 0 ||
+            (item.doctoId || logic.caratula?.DOCTO_CM_ID) ===
+              logic.lastScannedItem?.doctoId)
+        }
       />
     );
   };
@@ -844,10 +961,11 @@ export default function ReciboScreen() {
           </View>
         </View>
 
-        {/* Input para escaneo */}
+        {/* Input para escaneo (Persistente) */}
         <TextInput
           ref={scanInputRef}
           style={styles.hiddenScanInput}
+          value={logic.scannerValue}
           onChangeText={logic.processScannerText}
           autoCapitalize="none"
           autoCorrect={false}
@@ -855,6 +973,13 @@ export default function ReciboScreen() {
           showSoftInputOnFocus={false}
           multiline={true}
           autoFocus
+          onBlur={() => {
+            // No pedir foco si estamos en búsqueda o si hay algún modal que requiera teclado
+            // Pero en general, en el detalle de recibo, queremos foco siempre
+            if (logic.viewMode === "detail" && !logic.showSuccessModal) {
+              setTimeout(() => scanInputRef.current?.focus(), 100);
+            }
+          }}
         />
 
         {/* Feedback del escaneo flotante */}
@@ -999,6 +1124,7 @@ export default function ReciboScreen() {
         {/* Si hay órdenes combinadas, mostrar con secciones */}
         {articulosSections ? (
           <SectionList
+            ref={sectionListRef}
             sections={articulosSections}
             keyExtractor={(item: DetalleArticulo, index: number) =>
               `${item.ARTICULO_ID}-${item.doctoId || 0}-${index}`
@@ -1007,16 +1133,7 @@ export default function ReciboScreen() {
             renderSectionHeader={({
               section,
             }: {
-              section: {
-                title: string;
-                doctoId: number;
-                productCount: number;
-                escaneadas: number;
-                meta: number;
-                isComplete: boolean;
-                isPartial: boolean;
-                data: DetalleArticulo[];
-              };
+              section: any;
             }) => (
               <View style={{ backgroundColor: colors.background }}>
                 <View
@@ -1183,6 +1300,7 @@ export default function ReciboScreen() {
           />
         ) : (
           <FlatList
+            ref={flatListRef}
             data={logic.detalles}
             keyExtractor={(item, index) => `${item.ARTICULO_ID}-${index}`}
             renderItem={renderArticulo}

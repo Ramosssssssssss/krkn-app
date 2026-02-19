@@ -1,4 +1,5 @@
 import { CameraScannerPicking } from "@/components/CameraScannerPicking";
+import { SkeletonPickingCard } from "@/components/SkeletonPickingCard";
 import { VentanillaBanner } from "@/components/VentanillaBanner";
 import { API_URL } from "@/config/api";
 import { useAuth } from "@/context/auth-context";
@@ -12,17 +13,17 @@ import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Animated,
-    Dimensions,
-    Modal,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Animated,
+  Dimensions,
+  Modal,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArticleCardPicking } from "./_components/ArticleCardPicking";
@@ -57,7 +58,11 @@ export default function SurtePedidoScreen() {
 
   const [loading, setLoading] = useState(true);
   const [articulos, setArticulos] = useState<Articulo[]>([]);
-  const [alert, setAlert] = useState<{ visible: boolean; message: string }>({
+  const [alert, setAlert] = useState<{
+    visible: boolean;
+    message: string;
+    success?: boolean;
+  }>({
     visible: false,
     message: "",
   });
@@ -87,6 +92,32 @@ export default function SurtePedidoScreen() {
   // Navigation State
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollX = useRef(new Animated.Value(0)).current;
+  const lastInteractionIndex = useRef<number>(-1);
+
+  // Auto-scroll effect
+  useEffect(() => {
+    if (lastInteractionIndex.current !== -1) {
+      const idx = lastInteractionIndex.current;
+      const art = articulos[idx];
+      lastInteractionIndex.current = -1; // reset
+
+      // Si el item que acabamos de tocar ya está completo/confirmado, mover al siguiente
+      if (art && (art.SURTIDAS >= art.UNIDADES || art.CONFIRMADO)) {
+        // Buscar el siguiente incompleto
+        const nextIdx = articulos.findIndex(
+          (a, i) => i > idx && a.SURTIDAS < a.UNIDADES && !a.CONFIRMADO
+        );
+
+        if (nextIdx !== -1) {
+             // Pequeño delay para que el usuario vea el check verde
+             setTimeout(() => {
+                listRef.current?.scrollToIndex({ index: nextIdx, animated: true });
+                // setCurrentIndex se actualiza vía onViewableItemsChanged
+             }, 500);
+        }
+      }
+    }
+  }, [articulos]);
 
   // Camera Scanner
   const [permission, requestPermission] = useCameraPermissions();
@@ -589,7 +620,11 @@ export default function SurtePedidoScreen() {
 
       if (nuevaCant >= 0 && nuevaCant <= art.UNIDADES) {
         art.SURTIDAS = nuevaCant;
-        art.CONFIRMADO = false;
+        // Auto-confirmar si completó
+        art.CONFIRMADO = art.SURTIDAS === art.UNIDADES;
+        if (art.CONFIRMADO) {
+            lastInteractionIndex.current = index;
+        }
       }
       return newArticulos;
     });
@@ -598,11 +633,17 @@ export default function SurtePedidoScreen() {
   const incrementarSurtido = (index: number) => {
     setArticulos((prev) => {
       const newArticulos = [...prev];
-      const art = newArticulos[index];
+      const art = {...newArticulos[index]}; // shallow copy
+      newArticulos[index] = art;
+
       if (art.SURTIDAS < art.UNIDADES) {
         art.SURTIDAS += 1;
       }
-      art.CONFIRMADO = false;
+      // Auto-confirmar si completó
+      art.CONFIRMADO = art.SURTIDAS === art.UNIDADES;
+      if (art.CONFIRMADO) {
+         lastInteractionIndex.current = index;
+      }
       return newArticulos;
     });
   };
@@ -610,11 +651,15 @@ export default function SurtePedidoScreen() {
   const setSurtidoManual = (index: number, qty: number) => {
     setArticulos((prev) => {
       const newArticulos = [...prev];
-      newArticulos[index].SURTIDAS = Math.min(
-        qty,
-        newArticulos[index].UNIDADES,
-      );
-      newArticulos[index].CONFIRMADO = false;
+      const art = {...newArticulos[index]};
+      newArticulos[index] = art;
+
+      art.SURTIDAS = Math.min(qty, art.UNIDADES);
+      // Auto-confirmar si completó
+      art.CONFIRMADO = art.SURTIDAS === art.UNIDADES;
+      if (art.CONFIRMADO) {
+          lastInteractionIndex.current = index;
+      }
       return newArticulos;
     });
   };
@@ -622,7 +667,13 @@ export default function SurtePedidoScreen() {
   const handleConfirm = (index: number) => {
     setArticulos((prev) => {
       const newArticulos = [...prev];
-      newArticulos[index].CONFIRMADO = !newArticulos[index].CONFIRMADO;
+      const art = {...newArticulos[index]};
+      newArticulos[index] = art;
+
+      art.CONFIRMADO = !art.CONFIRMADO;
+      if (art.CONFIRMADO) {
+          lastInteractionIndex.current = index;
+      }
       return newArticulos;
     });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -675,12 +726,10 @@ export default function SurtePedidoScreen() {
         setAlert({
           visible: true,
           message:
-            "🎉 ¡Pedido finalizado con éxito!\n\n📦 Caja lista para packing",
+            "¡Pedido Completado!\n\nEl pedido ha sido surtido correctamente.",
+          success: true,
         });
-
-        setTimeout(() => {
-          router.replace("/(main)/procesos/picking/pedidos");
-        }, 2000);
+        // La navegación ahora la maneja el botón del modal de éxito
       } else {
         setAlert({
           visible: true,
@@ -942,8 +991,10 @@ export default function SurtePedidoScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.loadingWrapper}>
-          <ActivityIndicator size="small" color={colors.accent} />
+        <View style={styles.deckWrapper}>
+          <View style={styles.cardContainer}>
+            <SkeletonPickingCard />
+          </View>
         </View>
       ) : (
         <View style={styles.deckWrapper}>
@@ -1080,42 +1131,83 @@ export default function SurtePedidoScreen() {
         </View>
       )}
 
-      <Modal visible={alert.visible} transparent animationType="fade">
-        <View style={styles.modalOverlayAlt}>
-          <BlurView
-            intensity={20}
-            style={StyleSheet.absoluteFill}
-            tint="dark"
-          />
-          <View
-            style={[
-              styles.modalContentAlt,
-              { backgroundColor: colors.surface },
-            ]}
-          >
-            <View style={{ padding: 20, alignItems: "center" }}>
-              <Text style={[styles.modalTitleAlt, { color: colors.text }]}>
-                Atención
-              </Text>
-              <Text
-                style={[
-                  styles.modalMessageAlt,
-                  { color: colors.textSecondary },
-                ]}
+      <Modal
+        visible={alert.visible}
+        transparent
+        animationType={alert.success ? "slide" : "fade"}
+      >
+        {alert.success ? (
+          <View style={styles.successOverlay}>
+            <BlurView
+              intensity={80} // Increased blur for premium feel
+              style={StyleSheet.absoluteFill}
+              tint="systemMaterialDark" // Using material dark for better blur
+            />
+            {/* Capa extra para asegurar oscuridad */}
+            <View
+              style={[
+                StyleSheet.absoluteFill,
+                { backgroundColor: "rgba(0,0,0,0.4)" },
+              ]}
+            />
+            <View style={styles.successContent}>
+              <Animated.View style={styles.successIconCircle}>
+                <Ionicons name="checkmark" size={60} color="#fff" />
+              </Animated.View>
+              <Text style={styles.successTitle}>¡PROCESO COMPLETADO!</Text>
+              <Text style={styles.successMessage}>{alert.message}</Text>
+              <TouchableOpacity
+                style={styles.successBtn}
+                onPress={() => {
+                  setAlert({ visible: false, message: "" });
+                  router.replace("/(main)/procesos/picking");
+                }}
+                activeOpacity={0.9}
               >
-                {alert.message}
-              </Text>
+                <Text style={styles.successBtnText}>CONTINUAR</Text>
+                <Ionicons name="arrow-forward" size={20} color="#000" />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={[styles.modalBtnAlt, { borderTopColor: colors.border }]}
-              onPress={() => setAlert({ visible: false, message: "" })}
-            >
-              <Text style={[styles.modalBtnTextAlt, { color: colors.accent }]}>
-                OK
-              </Text>
-            </TouchableOpacity>
           </View>
-        </View>
+        ) : (
+          <View style={styles.modalOverlayAlt}>
+            <BlurView
+              intensity={20}
+              style={StyleSheet.absoluteFill}
+              tint="dark"
+            />
+            <View
+              style={[
+                styles.modalContentAlt,
+                { backgroundColor: colors.surface },
+              ]}
+            >
+              <View style={{ padding: 20, alignItems: "center" }}>
+                <Text style={[styles.modalTitleAlt, { color: colors.text }]}>
+                  Atención
+                </Text>
+                <Text
+                  style={[
+                    styles.modalMessageAlt,
+                    { color: colors.textSecondary },
+                  ]}
+                >
+                  {alert.message}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.modalBtnAlt, { borderTopColor: colors.border }]}
+                onPress={() => setAlert({ visible: false, message: "" })}
+              >
+                <Text
+                  style={[styles.modalBtnTextAlt, { color: colors.accent }]}
+                >
+                  OK
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
       </Modal>
 
       {/* 🚀 Ventanilla Uber-style Notification */}
@@ -1129,7 +1221,7 @@ export default function SurtePedidoScreen() {
         duration={30}
       />
 
-      {/* � Camera Scanner Modal */}
+      {/*  Camera Scanner Modal */}
       <CameraScannerPicking
         visible={showCameraScanner}
         onClose={() => setShowCameraScanner(false)}
@@ -1140,7 +1232,7 @@ export default function SurtePedidoScreen() {
         lastScanSuccess={cameraScanSuccess}
       />
 
-      {/* �📋 Modal de Detalles de Ventanilla */}
+      {/* 📋 Modal de Detalles de Ventanilla */}
       <Modal
         visible={ventanillaDetallesModal}
         transparent
@@ -1440,6 +1532,11 @@ const styles = StyleSheet.create({
   boxCardCode: { fontSize: 14, fontWeight: "800", marginTop: 5 },
   boxCardName: { fontSize: 10, fontWeight: "600", marginTop: 2 },
   deckWrapper: { flex: 1, position: "relative" },
+  cardContainer: {
+    flex: 1,
+    padding: 15,
+    justifyContent: "center",
+  },
   footerAction: {
     paddingHorizontal: 20,
     position: "absolute",
@@ -1597,9 +1694,72 @@ const styles = StyleSheet.create({
   },
   ventanillaItemName: {
     fontSize: 14,
-    fontWeight: "600",
-    marginBottom: 4,
+    fontWeight: "700",
+    marginBottom: 6,
     lineHeight: 18,
+  },
+  
+  // Estilos Success Premium
+  successOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  successContent: {
+    alignItems: "center",
+    padding: 40,
+    width: "100%",
+  },
+  successIconCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: "#10B981",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 30,
+    shadowColor: "#10B981",
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 10,
+    borderWidth: 4,
+    borderColor: "rgba(255,255,255,0.2)",
+  },
+  successTitle: {
+    fontSize: 24,
+    fontWeight: "900",
+    color: "#fff",
+    marginBottom: 12,
+    textAlign: "center",
+    letterSpacing: 0.5,
+  },
+  successMessage: {
+    fontSize: 15,
+    color: "rgba(255,255,255,0.8)",
+    textAlign: "center",
+    marginBottom: 40,
+    lineHeight: 22,
+    maxWidth: "80%",
+  },
+  successBtn: {
+    backgroundColor: "#fff",
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 5,
+    transform: [{ scale: 1.05 }], // Slight pop
+  },
+  successBtnText: {
+    color: "#000",
+    fontSize: 15,
+    fontWeight: "900",
+    letterSpacing: 1,
   },
   ventanillaItemMeta: {
     flexDirection: "row",

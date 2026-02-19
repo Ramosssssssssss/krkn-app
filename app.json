@@ -3,7 +3,7 @@
     "name": "KRKN_G",
     "slug": "KRKN_G",
     "owner": "fyttsa",
-    "version": "1.0.9",
+    "version": "1.1.1",
     "orientation": "portrait",
     "icon": "./assets/images/ggplay.png",
     "scheme": "krkng",
@@ -48,10 +48,7 @@
         {
           "icon": "./assets/images/ggplay.png",
           "color": "#3B82F6",
-          "defaultChannel": "inventarios",
-          "sounds": [
-            "./assets/sounds/aviso.wav"
-          ]
+          "defaultChannel": "inventarios"
         }
       ],
       [

@@ -13,6 +13,7 @@ import GlobalFontScaler from "@/components/GlobalFontScaler";
 import { AssistiveProvider } from "@/context/assistive-context";
 import { AuthProvider } from "@/context/auth-context";
 import { LanguageProvider } from "@/context/language-context";
+import { ParkedSalesProvider } from "@/context/pos/parked-sales-context";
 import { ThemeProvider, useTheme } from "@/context/theme-context";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 
@@ -51,7 +52,9 @@ export default function RootLayout() {
         <LanguageProvider>
           <AuthProvider>
             <AssistiveProvider>
-              <RootLayoutNav />
+              <ParkedSalesProvider>
+                <RootLayoutNav />
+              </ParkedSalesProvider>
             </AssistiveProvider>
           </AuthProvider>
         </LanguageProvider>

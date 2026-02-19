@@ -1,4 +1,5 @@
 import { CameraScannerPicking } from "@/components/CameraScannerPicking";
+import { SkeletonPickingCard } from "@/components/SkeletonPickingCard";
 import { API_CONFIG, API_URL } from "@/config/api";
 import { useThemeColors } from "@/context/theme-context";
 import { getCurrentDatabaseId } from "@/services/api";
@@ -9,17 +10,17 @@ import * as Haptics from "expo-haptics";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Animated,
-    BackHandler,
-    Dimensions,
-    Image,
-    Modal,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Animated,
+  BackHandler,
+  Dimensions,
+  Image,
+  Modal,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -46,7 +47,8 @@ export default function SurteVentanillaScreen() {
   const insets = useSafeAreaInsets();
 
   // Soporta tanto traspasoId (del modal) como traspasoInId (de la lista)
-  const effectiveTraspasoId = traspasoId || traspasoInId;
+  const rawId = traspasoId || traspasoInId;
+  const effectiveTraspasoId = Array.isArray(rawId) ? rawId[0] : rawId;
 
   const parsedArticulos: ArticuloVentanilla[] = articulos
     ? JSON.parse(articulos as string).map((art: any) => ({
@@ -59,7 +61,12 @@ export default function SurteVentanillaScreen() {
   const [items, setItems] = useState<ArticuloVentanilla[]>(parsedArticulos);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(!articulos); // Si no hay articulos, cargar del API
-  const [alert, setAlert] = useState<{ visible: boolean; message: string }>({
+  const [imgErrors, setImgErrors] = useState<Record<string, boolean>>({});
+  const [alert, setAlert] = useState<{
+    visible: boolean;
+    message: string;
+    success?: boolean;
+  }>({
     visible: false,
     message: "",
   });
@@ -93,6 +100,33 @@ export default function SurteVentanillaScreen() {
   const scannerRef = useRef<TextInput>(null);
   const listRef = useRef<any>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
+  const lastInteractionIndex = useRef<number>(-1);
+
+  // Auto-scroll effect
+  useEffect(() => {
+    if (lastInteractionIndex.current !== -1) {
+      const idx = lastInteractionIndex.current;
+      const item = items[idx];
+      lastInteractionIndex.current = -1; // reset
+
+      // Si el item que acabamos de tocar ya está completo/confirmado, mover al siguiente
+      const surtidas = item?.SURTIDAS ?? 0;
+      if (item && (surtidas >= item.UNIDADES || item.CONFIRMADO)) {
+        // Buscar el siguiente incompleto
+        const nextIdx = items.findIndex(
+          (a, i) => i > idx && (a.SURTIDAS ?? 0) < a.UNIDADES && !a.CONFIRMADO
+        );
+
+        if (nextIdx !== -1) {
+             // Pequeño delay para que el usuario vea el check verde
+             setTimeout(() => {
+                listRef.current?.scrollToIndex({ index: nextIdx, animated: true });
+                // setCurrentIndex se actualiza vía onViewableItemsChanged
+             }, 500);
+        }
+      }
+    }
+  }, [items]);
 
   // Camera Scanner
   const [permission, requestPermission] = useCameraPermissions();
@@ -404,26 +438,21 @@ export default function SurteVentanillaScreen() {
   const incrementarSurtido = (index: number) => {
     setItems((prev) => {
       const newItems = [...prev];
-      const art = newItems[index];
-      if ((art.SURTIDAS ?? 0) < art.UNIDADES) {
-        art.SURTIDAS = (art.SURTIDAS ?? 0) + 1;
+      const art = {...newItems[index]};
+      newItems[index] = art;
 
-        // Auto-confirmar si llegó al total
-        if (art.SURTIDAS >= art.UNIDADES) {
-          art.CONFIRMADO = true;
-          // Auto-scroll al siguiente
-          if (index < newItems.length - 1) {
-            setTimeout(() => {
-              const nextIndex = index + 1;
-              listRef.current?.scrollToIndex({
-                index: nextIndex,
-                animated: true,
-              });
-              setCurrentIndex(nextIndex);
-            }, 600);
-          }
-        }
+      const current = art.SURTIDAS ?? 0;
+      if (current < art.UNIDADES) {
+        art.SURTIDAS = current + 1;
       }
+      
+      // Auto-confirm logic
+      art.CONFIRMADO = (art.SURTIDAS ?? 0) >= art.UNIDADES;
+      
+      if (art.CONFIRMADO) {
+         lastInteractionIndex.current = index;
+      }
+      
       return newItems;
     });
   };
@@ -443,9 +472,14 @@ export default function SurteVentanillaScreen() {
   const setSurtidoManual = (index: number, qty: number) => {
     setItems((prev) => {
       const newItems = [...prev];
-      newItems[index].SURTIDAS = Math.min(qty, newItems[index].UNIDADES);
-      if (newItems[index].SURTIDAS >= newItems[index].UNIDADES) {
-        newItems[index].CONFIRMADO = true;
+      const art = {...newItems[index]};
+      newItems[index] = art;
+
+      art.SURTIDAS = Math.min(qty, art.UNIDADES);
+      
+      art.CONFIRMADO = (art.SURTIDAS ?? 0) >= art.UNIDADES;
+      if (art.CONFIRMADO) {
+        lastInteractionIndex.current = index;
       }
       return newItems;
     });
@@ -454,7 +488,13 @@ export default function SurteVentanillaScreen() {
   const handleConfirm = (index: number) => {
     setItems((prev) => {
       const newItems = [...prev];
-      newItems[index].CONFIRMADO = !newItems[index].CONFIRMADO;
+      const item = {...newItems[index]};
+      newItems[index] = item;
+
+      item.CONFIRMADO = !item.CONFIRMADO;
+      if (item.CONFIRMADO) {
+          lastInteractionIndex.current = index;
+      }
       return newItems;
     });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -502,18 +542,14 @@ export default function SurteVentanillaScreen() {
       const data = await response.json();
 
       if (data.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setAlert({
           visible: true,
-          message: "¡Ventanilla completada con éxito!",
+          message:
+            "🎉 ¡Ventanilla Completada!\n\nEl proceso ha finalizado correctamente.",
+          success: true,
         });
-        setTimeout(() => {
-          // Si viene del modal, volver atrás. Si viene de la lista, ir a la lista de ventanillas.
-          if (articulos) {
-            router.back();
-          } else {
-            router.replace("/(main)/procesos/picking/ventanilla/index" as any);
-          }
-        }, 2000);
+        // La navegación la maneja el botón del modal
       } else {
         setAlert({
           visible: true,
@@ -530,7 +566,7 @@ export default function SurteVentanillaScreen() {
   const handleExit = async () => {
     setLoading(true);
     try {
-      // Actualizar estatus a "P" (pendiente) de nuevo
+      // Actualizar estatus a "P" (pendiente) de nuevo para liberar la ventanilla
       const databaseId = getCurrentDatabaseId();
       await fetch(`${API_URL}/api/update-ventanilla.php`, {
         method: "POST",
@@ -546,11 +582,10 @@ export default function SurteVentanillaScreen() {
     } finally {
       setLoading(false);
       setExitModalVisible(false);
-      // Si viene del modal, volver atrás. Si viene de la lista, ir a la lista de ventanillas.
-      if (articulos) {
+      if (router.canGoBack()) {
         router.back();
       } else {
-        router.replace("/(main)/procesos/picking/ventanilla/index" as any);
+        router.replace("/(main)/procesos/picking");
       }
     }
   };
@@ -609,7 +644,13 @@ export default function SurteVentanillaScreen() {
       >
         <View style={styles.headerTop}>
           <TouchableOpacity
-            onPress={() => setExitModalVisible(true)}
+            onPress={() => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace("/(main)/procesos/picking");
+              }
+            }}
             style={[styles.headerBtn, { backgroundColor: colors.background }]}
           >
             <Ionicons name="arrow-back" size={22} color={colors.text} />
@@ -664,21 +705,23 @@ export default function SurteVentanillaScreen() {
         </Text>
       </View>
 
-      {/* Lista de artículos */}
-      <Animated.FlatList
-        ref={listRef}
-        data={items}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-          { useNativeDriver: true },
-        )}
-        onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
-        keyExtractor={(item, idx) => `${item.ARTICULO_ID}-${idx}`}
-        renderItem={({ item, index }) => {
+      {/* Carrusel de Artículos con Skeleton Loading */}
+      {loading ? (
+        <View style={[styles.cardWrapper, { width: SCREEN_WIDTH }]}>
+          <SkeletonPickingCard />
+        </View>
+      ) : (
+        <Animated.FlatList
+          ref={listRef}
+          data={items}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onScroll={() => {}}
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
+          keyExtractor={(item, idx) => `${item.ARTICULO_ID}-${idx}`}
+          renderItem={({ item, index }) => {
           const isConfirmed = item.CONFIRMADO;
           const surtidas = item.SURTIDAS ?? 0;
           const isLocked = !!(
@@ -697,13 +740,34 @@ export default function SurteVentanillaScreen() {
                     { backgroundColor: colors.background },
                   ]}
                 >
-                  <Image
-                    source={{
-                      uri: `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.IMAGEN_ARTICULO}?databaseId=${getCurrentDatabaseId()}&articuloId=${item.ARTICULO_ID}`,
-                    }}
-                    style={styles.productImage}
-                    resizeMode="contain"
-                  />
+                  {!imgErrors[item.ARTICULO_ID] ? (
+                    <Image
+                      source={{
+                        uri: `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.IMAGEN_ARTICULO}?databaseId=${getCurrentDatabaseId()}&articuloId=${item.ARTICULO_ID}`,
+                      }}
+                      style={styles.productImage}
+                      resizeMode="contain"
+                      onError={() =>
+                        setImgErrors((prev) => ({
+                          ...prev,
+                          [item.ARTICULO_ID]: true,
+                        }))
+                      }
+                    />
+                  ) : (
+                    <View
+                      style={[
+                        styles.productImage,
+                        { justifyContent: "center", alignItems: "center" },
+                      ]}
+                    >
+                      <Ionicons
+                        name="cube-outline"
+                        size={80}
+                        color={colors.textTertiary || "#9CA3AF"}
+                      />
+                    </View>
+                  )}
                   {/* Badge de ubicación flotante */}
                   <View
                     style={[
@@ -847,26 +911,33 @@ export default function SurteVentanillaScreen() {
                       <Ionicons name="remove" size={24} color={colors.text} />
                     </TouchableOpacity>
 
-                    {/* Botón central de confirmar */}
-                    <TouchableOpacity
-                      onPress={() => handleConfirm(index)}
-                      style={[
-                        styles.confirmCircle,
-                        {
-                          backgroundColor: isConfirmed
-                            ? "#6B7280"
-                            : surtidas >= item.UNIDADES
-                              ? "#10B981"
-                              : colors.accent,
-                        },
-                      ]}
-                    >
-                      <Ionicons
-                        name={isConfirmed ? "refresh-outline" : "checkmark"}
-                        size={32}
-                        color="#fff"
-                      />
-                    </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleConfirm(index)}
+                        style={[
+                          styles.confirmCircle,
+                          {
+                            backgroundColor: isConfirmed
+                              ? surtidas === 0
+                                ? "#F59E0B"
+                                : "#6B7280"
+                              : surtidas >= item.UNIDADES
+                                ? "#10B981"
+                                : colors.accent,
+                          },
+                        ]}
+                      >
+                        <Ionicons
+                          name={
+                            isConfirmed
+                              ? surtidas === 0
+                                ? "alert-circle-outline"
+                                : "refresh-outline"
+                              : "checkmark"
+                          }
+                          size={32}
+                          color="#fff"
+                        />
+                      </TouchableOpacity>
 
                     <TouchableOpacity
                       onPress={() => incrementarSurtido(index)}
@@ -904,18 +975,58 @@ export default function SurteVentanillaScreen() {
                   />
                 </View>
 
-                {/* Overlay confirmado */}
+                {/* Overlay confirmado (Blur Completo) */}
                 {isConfirmed && (
                   <View style={styles.confirmedOverlay}>
-                    <View style={styles.confirmedIcon}>
-                      <Ionicons name="checkmark" size={48} color="#fff" />
+                    <BlurView
+                      intensity={95}
+                      style={StyleSheet.absoluteFill}
+                      tint="systemMaterialDark"
+                    />
+                    <View style={styles.confirmedContent}>
+                      <View
+                        style={[
+                          styles.confirmedCircleOverlay,
+                          {
+                            backgroundColor:
+                              surtidas === 0 ? "#F59E0B" : "#10B981",
+                          },
+                        ]}
+                      >
+                        <Ionicons
+                          name={
+                            surtidas === 0
+                              ? "alert-outline"
+                              : "checkmark-done-outline"
+                          }
+                          size={40}
+                          color="#fff"
+                        />
+                      </View>
+                      <Text
+                        style={[
+                          styles.confirmedTitle,
+                          { color: surtidas === 0 ? "#F59E0B" : "#10B981" },
+                        ]}
+                      >
+                        {surtidas === 0
+                          ? "CONFIRMADO EN CERO"
+                          : surtidas >= item.UNIDADES
+                            ? "COMPLETADO"
+                            : "CONFIRMADO PARCIAL"}
+                      </Text>
+                      <Text style={styles.confirmedSub}>
+                        {surtidas} de {item.UNIDADES} piezas surtidas
+                      </Text>
+
+                      <TouchableOpacity
+                        style={styles.editBtnOverlay}
+                        onPress={() => handleConfirm(index)}
+                      >
+                        <Ionicons name="pencil" size={16} color="#fff" />
+                        <Text style={styles.editBtnSimpleText}>EDITAR</Text>
+                      </TouchableOpacity>
                     </View>
-                    <TouchableOpacity
-                      onPress={() => handleConfirm(index)}
-                      style={styles.editBtn}
-                    >
-                      <Ionicons name="pencil" size={20} color={colors.accent} />
-                    </TouchableOpacity>
                   </View>
                 )}
               </View>
@@ -923,6 +1034,7 @@ export default function SurteVentanillaScreen() {
           );
         }}
       />
+      )}
 
       {/* Feedback de ubicación desbloqueada */}
       {locationFeedback.visible && (
@@ -1005,7 +1117,10 @@ export default function SurteVentanillaScreen() {
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                onPress={handleExit}
+                onPress={() => {
+                   setExitModalVisible(false);
+                   if (router.canGoBack()) { router.back(); } else { router.replace("/(main)/procesos/picking"); }
+                }}
                 style={[styles.modalBtn, { backgroundColor: "#EF4444" }]}
               >
                 <Text style={[styles.modalBtnText, { color: "#fff" }]}>
@@ -1080,32 +1195,78 @@ export default function SurteVentanillaScreen() {
       </Modal>
 
       {/* Modal Alert */}
-      <Modal visible={alert.visible} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <BlurView
-            intensity={20}
-            style={StyleSheet.absoluteFill}
-            tint="dark"
-          />
-          <View
-            style={[styles.modalContent, { backgroundColor: colors.surface }]}
-          >
-            <Text style={[styles.modalTitle, { color: colors.text }]}>
-              {alert.message.includes("éxito") ? "🎉" : "⚠️"}
-            </Text>
-            <Text
-              style={[styles.modalMessage, { color: colors.textSecondary }]}
-            >
-              {alert.message}
-            </Text>
-            <TouchableOpacity
-              onPress={() => setAlert({ visible: false, message: "" })}
-              style={[styles.modalBtnFull, { backgroundColor: colors.accent }]}
-            >
-              <Text style={[styles.modalBtnText, { color: "#fff" }]}>OK</Text>
-            </TouchableOpacity>
+      <Modal
+        visible={alert.visible}
+        transparent
+        animationType={alert.success ? "slide" : "fade"}
+      >
+        {alert.success ? (
+          <View style={styles.successOverlay}>
+            <BlurView
+              intensity={80}
+              style={StyleSheet.absoluteFill}
+              tint="systemMaterialDark"
+            />
+            <View
+              style={[
+                StyleSheet.absoluteFill,
+                { backgroundColor: "rgba(0,0,0,0.4)" },
+              ]}
+            />
+            <View style={styles.successContent}>
+              <Animated.View style={styles.successIconCircle}>
+                <Ionicons name="checkmark" size={60} color="#fff" />
+              </Animated.View>
+              <Text style={styles.successTitle}>¡PROCESO COMPLETADO!</Text>
+              <Text style={styles.successMessage}>{alert.message}</Text>
+              <TouchableOpacity
+                style={styles.successBtn}
+                onPress={() => {
+                  setAlert({ visible: false, message: "" });
+                  // Misma lógica de salida segura
+                  if (articulos && router.canGoBack()) {
+                    router.back();
+                  } else {
+                    router.replace("/(main)/procesos/picking");
+                  }
+                }}
+                activeOpacity={0.9}
+              >
+                <Text style={styles.successBtnText}>CONTINUAR</Text>
+                <Ionicons name="arrow-forward" size={20} color="#000" />
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
+        ) : (
+          <View style={styles.modalOverlay}>
+            <BlurView
+              intensity={20}
+              style={StyleSheet.absoluteFill}
+              tint="dark"
+            />
+            <View
+              style={[styles.modalContent, { backgroundColor: colors.surface }]}
+            >
+              <Text style={[styles.modalTitle, { color: colors.text }]}>
+                {alert.message.includes("éxito") ? "🎉" : "⚠️"}
+              </Text>
+              <Text
+                style={[styles.modalMessage, { color: colors.textSecondary }]}
+              >
+                {alert.message}
+              </Text>
+              <TouchableOpacity
+                onPress={() => setAlert({ visible: false, message: "" })}
+                style={[
+                  styles.modalBtnFull,
+                  { backgroundColor: colors.accent },
+                ]}
+              >
+                <Text style={[styles.modalBtnText, { color: "#fff" }]}>OK</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
       </Modal>
 
       {/* 📷 Camera Scanner Modal */}
@@ -1348,12 +1509,59 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   confirmBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  
+  // Nuevos estilos para overlay de confirmación
   confirmedOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(16, 185, 129, 0.9)",
-    borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
+    zIndex: 900,
+    borderRadius: 20,
+    overflow: "hidden",
+  },
+  confirmedContent: {
+    alignItems: "center",
+  },
+  confirmedCircleOverlay: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 15,
+    shadowColor: "#000",
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  confirmedTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+  confirmedSub: {
+    color: "rgba(255,255,255,0.8)",
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 20,
+  },
+  editBtnOverlay: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.3)",
+  },
+  editBtnSimpleText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 1,
   },
   confirmedIcon: {
     backgroundColor: "rgba(255,255,255,0.2)",
@@ -1370,6 +1578,20 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   footer: { paddingHorizontal: 20 },
+  footerAction: {
+    paddingHorizontal: 20,
+    position: "absolute",
+    bottom: 20,
+    width: "100%",
+    elevation: 10,
+    zIndex: 10,
+  },
+  cardContainer: {
+    flex: 1,
+    padding: 15,
+    justifyContent: "center",
+  },
+  
   finishBtn: {
     height: 60,
     borderRadius: 20,
@@ -1379,6 +1601,69 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   finishBtnText: { color: "#FFF", fontSize: 16, fontWeight: "800" },
+  
+  // Estilos Success Premium
+  successOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  successContent: {
+    alignItems: "center",
+    padding: 40,
+    width: "100%",
+  },
+  successIconCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: "#10B981",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 30,
+    shadowColor: "#10B981",
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 10,
+    borderWidth: 4,
+    borderColor: "rgba(255,255,255,0.2)",
+  },
+  successTitle: {
+    fontSize: 24,
+    fontWeight: "900",
+    color: "#fff",
+    marginBottom: 12,
+    textAlign: "center",
+    letterSpacing: 0.5,
+  },
+  successMessage: {
+    fontSize: 15,
+    color: "rgba(255,255,255,0.8)",
+    textAlign: "center",
+    marginBottom: 40,
+    lineHeight: 22,
+    maxWidth: "80%",
+  },
+  successBtn: {
+    backgroundColor: "#fff",
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 5,
+    transform: [{ scale: 1.05 }],
+  },
+  successBtnText: {
+    color: "#000",
+    fontSize: 15,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
   deckInfo: {
     padding: 15,
     borderRadius: 20,

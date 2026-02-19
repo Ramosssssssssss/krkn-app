@@ -1,17 +1,18 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Audio } from "expo-av";
 import * as Haptics from "expo-haptics";
 import React, { useEffect, useRef, useState } from "react";
 import {
     Animated,
     Dimensions,
+    Platform,
     StyleSheet,
     Text,
     TouchableOpacity,
-    View
+    View,
 } from "react-native";
+import Svg, { Circle } from "react-native-svg";
 
-const { width } = Dimensions.get("window");
+const { height } = Dimensions.get("window");
 
 interface VentanillaData {
   TRASPASO_IN_ID: number;
@@ -30,6 +31,65 @@ interface VentanillaBannerProps {
   colors: any;
 }
 
+// Circular countdown — el protagonista
+const CircularTimer = ({
+  countdown,
+  duration,
+  isUrgent,
+}: {
+  countdown: number;
+  duration: number;
+  isUrgent: boolean;
+}) => {
+  const SIZE = 80;
+  const STROKE = 4;
+  const RADIUS = (SIZE - STROKE) / 2;
+  const CIRCUMFERENCE = RADIUS * 2 * Math.PI;
+  const progress = countdown / duration;
+  const strokeDashoffset = CIRCUMFERENCE * (1 - progress);
+  const trackColor = isUrgent ? "#FECACA" : "#E5E7EB";
+  const fillColor = isUrgent ? "#EF4444" : "#111827";
+
+  return (
+    <View style={timerStyles.wrap}>
+      <Svg width={SIZE} height={SIZE}>
+        {/* Track */}
+        <Circle
+          cx={SIZE / 2}
+          cy={SIZE / 2}
+          r={RADIUS}
+          stroke={trackColor}
+          strokeWidth={STROKE}
+          fill="transparent"
+        />
+        {/* Fill */}
+        <Circle
+          cx={SIZE / 2}
+          cy={SIZE / 2}
+          r={RADIUS}
+          stroke={fillColor}
+          strokeWidth={STROKE}
+          fill="transparent"
+          strokeDasharray={CIRCUMFERENCE}
+          strokeDashoffset={strokeDashoffset}
+          strokeLinecap="round"
+          rotation="-90"
+          origin={`${SIZE / 2}, ${SIZE / 2}`}
+        />
+      </Svg>
+      <View style={timerStyles.center}>
+        <Text style={[timerStyles.number, { color: fillColor }]}>{countdown}</Text>
+      </View>
+    </View>
+  );
+};
+
+const timerStyles = StyleSheet.create({
+  wrap: { position: "relative", justifyContent: "center", alignItems: "center" },
+  center: { position: "absolute", alignItems: "center" },
+  number: { fontSize: 22, fontWeight: "800", letterSpacing: -0.5 },
+});
+
 export function VentanillaBanner({
   visible,
   onAccept,
@@ -41,81 +101,51 @@ export function VentanillaBanner({
 }: VentanillaBannerProps) {
   const [countdown, setCountdown] = useState(duration);
   const [isAccepted, setIsAccepted] = useState(false);
-  const opacity = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.9)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  const translateY = useRef(new Animated.Value(300)).current;
+  const overlayOpacity = useRef(new Animated.Value(0)).current;
   const intervalRef = useRef<any>(null);
-  const soundRef = useRef<Audio.Sound | null>(null);
 
   const isUrgent = countdown <= 10;
 
-  // Vibración al aparecer
   useEffect(() => {
     if (visible) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     }
   }, [visible]);
 
-  // Pulso de urgencia
-  useEffect(() => {
-    if (visible && isUrgent) {
-      const pulseLoop = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.05,
-            duration: 300,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 300,
-            useNativeDriver: true,
-          }),
-        ]),
-      );
-      pulseLoop.start();
-      return () => pulseLoop.stop();
-    }
-  }, [visible, isUrgent]);
-
-  // Animación de entrada/salida
   useEffect(() => {
     if (visible) {
       setCountdown(duration);
       setIsAccepted(false);
 
       Animated.parallel([
-        Animated.timing(opacity, {
+        Animated.timing(overlayOpacity, {
           toValue: 1,
-          duration: 300,
+          duration: 250,
           useNativeDriver: true,
         }),
-        Animated.spring(scaleAnim, {
-          toValue: 1,
-          tension: 50,
-          friction: 8,
+        Animated.spring(translateY, {
+          toValue: 0,
+          tension: 70,
+          friction: 12,
           useNativeDriver: true,
         }),
       ]).start();
 
-      // Contador
       const startTime = Date.now();
       intervalRef.current = setInterval(() => {
         const elapsed = Math.floor((Date.now() - startTime) / 1000);
         const remaining = duration - elapsed;
-
         if (remaining <= 0) {
           clearInterval(intervalRef.current!);
           intervalRef.current = null;
           setCountdown(0);
-          if (!isAccepted) {
-            onDismiss();
-          }
+          if (!isAccepted) onDismiss();
         } else {
           setCountdown(remaining);
-          // Vibración cada 10 segundos
-          if (remaining % 10 === 0) {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          if (remaining === 10) {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
           }
         }
       }, 1000);
@@ -128,14 +158,14 @@ export function VentanillaBanner({
       };
     } else {
       Animated.parallel([
-        Animated.timing(opacity, {
+        Animated.timing(overlayOpacity, {
           toValue: 0,
           duration: 200,
           useNativeDriver: true,
         }),
-        Animated.timing(scaleAnim, {
-          toValue: 0.9,
-          duration: 200,
+        Animated.timing(translateY, {
+          toValue: 300,
+          duration: 250,
           useNativeDriver: true,
         }),
       ]).start();
@@ -162,131 +192,76 @@ export function VentanillaBanner({
     onDismiss();
   };
 
-  // Limpiar folio
   const limpiarFolio = (folio: string) => {
     const match = folio.match(/^([A-Z]+)0*([0-9]+)$/);
-    if (match) {
-      return `${match[1]}${match[2]}`;
-    }
+    if (match) return `${match[1]}${match[2]}`;
     return folio;
   };
 
   return (
-    <Animated.View
-      style={[
-        styles.overlay,
-        {
-          opacity,
-        },
-      ]}
-    >
+    <Animated.View style={[styles.overlay, { opacity: overlayOpacity }]}>
+      {/* Tap outside = dismiss */}
+      <TouchableOpacity
+        style={StyleSheet.absoluteFill}
+        onPress={handleDismiss}
+        activeOpacity={1}
+      />
+
       <Animated.View
-        style={[
-          styles.container,
-          {
-            backgroundColor: colors.surface,
-            borderColor: isUrgent ? "#EF4444" : colors.accent,
-            transform: [{ scale: Animated.multiply(scaleAnim, pulseAnim) }],
-          },
-        ]}
+        style={[styles.card, { transform: [{ translateY }] }]}
       >
-        {/* Header con ícono */}
-        <View style={styles.header}>
-          <View
-            style={[
-              styles.iconContainer,
-              {
-                backgroundColor: (isUrgent ? "#EF4444" : colors.accent) + "20",
-              },
-            ]}
-          >
-            <Ionicons
-              name="notifications"
-              size={28}
-              color={isUrgent ? "#EF4444" : colors.accent}
-            />
+        {/* Handle */}
+        <View style={styles.handle} />
+
+        {/* Main row: info + timer */}
+        <View style={styles.mainRow}>
+          {/* Left: icon + text */}
+          <View style={styles.leftCol}>
+            <View style={styles.iconBox}>
+              <Ionicons name="flash" size={20} color="#111827" />
+            </View>
+            <View style={styles.textCol}>
+              <Text style={styles.label}>Nueva ventanilla</Text>
+              <Text style={styles.folio}>{limpiarFolio(ventanilla.FOLIO)}</Text>
+              <Text style={styles.almacen}>{ventanilla.ALMACEN}</Text>
+            </View>
           </View>
-          <View style={styles.headerText}>
-            <Text style={[styles.title, { color: colors.text }]}>
-              🚨 Nueva Ventanilla
-            </Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              Traspaso disponible para surtir
-            </Text>
-          </View>
-          <View
-            style={[
-              styles.countdownBadge,
-              { backgroundColor: isUrgent ? "#EF4444" : colors.accent },
-            ]}
-          >
-            <Text style={styles.countdownText}>{countdown}s</Text>
-          </View>
+
+          {/* Right: circular timer */}
+          <CircularTimer
+            countdown={countdown}
+            duration={duration}
+            isUrgent={isUrgent}
+          />
         </View>
 
-        {/* Info del traspaso */}
-        <View style={[styles.infoCard, { backgroundColor: colors.background }]}>
-          <View style={styles.infoRow}>
-            <Ionicons name="document-text" size={20} color={colors.accent} />
-            <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>
-              Folio:
-            </Text>
-            <Text style={[styles.infoValue, { color: colors.text }]}>
-              {limpiarFolio(ventanilla.FOLIO)}
-            </Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Ionicons name="business" size={20} color={colors.accent} />
-            <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>
-              Almacén:
-            </Text>
-            <Text style={[styles.infoValue, { color: colors.text }]}>
-              {ventanilla.ALMACEN}
-            </Text>
-          </View>
-        </View>
+        {/* Divider */}
+        <View style={styles.divider} />
 
-        {/* Botones */}
-        <View style={styles.buttons}>
+        {/* Buttons */}
+        <View style={styles.buttonsRow}>
           <TouchableOpacity
-            style={[styles.dismissBtn, { borderColor: colors.border }]}
+            style={styles.dismissBtn}
             onPress={handleDismiss}
             disabled={loading}
+            activeOpacity={0.6}
           >
-            <Text style={[styles.dismissText, { color: colors.textSecondary }]}>
-              Ignorar
-            </Text>
+            <Text style={styles.dismissText}>Ignorar</Text>
           </TouchableOpacity>
+
           <TouchableOpacity
             style={[
               styles.acceptBtn,
-              { backgroundColor: isUrgent ? "#EF4444" : colors.accent },
+              isUrgent && styles.acceptBtnUrgent,
             ]}
             onPress={handleAccept}
             disabled={loading}
+            activeOpacity={0.85}
           >
-            {loading ? (
-              <Text style={styles.acceptText}>Tomando...</Text>
-            ) : (
-              <>
-                <Ionicons name="checkmark-circle" size={20} color="#fff" />
-                <Text style={styles.acceptText}>¡Tomar!</Text>
-              </>
-            )}
+            <Text style={styles.acceptText}>
+              {loading ? "Tomando..." : "Tomar"}
+            </Text>
           </TouchableOpacity>
-        </View>
-
-        {/* Barra de progreso */}
-        <View style={[styles.progressBg, { backgroundColor: colors.border }]}>
-          <View
-            style={[
-              styles.progressBar,
-              {
-                backgroundColor: isUrgent ? "#EF4444" : colors.accent,
-                width: `${(countdown / duration) * 100}%`,
-              },
-            ]}
-          />
         </View>
       </Animated.View>
     </Animated.View>
@@ -296,113 +271,113 @@ export function VentanillaBanner({
 const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    justifyContent: "center",
-    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "flex-end",
     zIndex: 9999,
   },
-  container: {
-    width: width - 40,
-    borderRadius: 20,
-    borderWidth: 2,
-    padding: 20,
+  card: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingTop: 12,
+    paddingHorizontal: 24,
+    paddingBottom: Platform.OS === "ios" ? 44 : 28,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.08,
     shadowRadius: 20,
-    elevation: 20,
+    elevation: 24,
   },
-  header: {
+  handle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#E5E7EB",
+    alignSelf: "center",
+    marginBottom: 24,
+  },
+  // Main content row
+  mainRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 16,
+    justifyContent: "space-between",
+    marginBottom: 24,
   },
-  iconContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 15,
+  leftCol: {
+    flexDirection: "row",
     alignItems: "center",
+    gap: 14,
+    flex: 1,
+  },
+  iconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: "#F3F4F6",
     justifyContent: "center",
-  },
-  headerText: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  subtitle: {
-    fontSize: 13,
-    marginTop: 2,
-  },
-  countdownBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  countdownText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 14,
-  },
-  infoCard: {
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 16,
-    gap: 10,
-  },
-  infoRow: {
-    flexDirection: "row",
     alignItems: "center",
-    gap: 10,
   },
-  infoLabel: {
-    fontSize: 14,
-  },
-  infoValue: {
-    fontSize: 16,
-    fontWeight: "600",
+  textCol: {
     flex: 1,
+    gap: 2,
   },
-  buttons: {
+  label: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#9CA3AF",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  folio: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#111827",
+    letterSpacing: -0.5,
+  },
+  almacen: {
+    fontSize: 13,
+    color: "#6B7280",
+    fontWeight: "500",
+  },
+  // Divider
+  divider: {
+    height: 1,
+    backgroundColor: "#F3F4F6",
+    marginBottom: 20,
+  },
+  // Buttons
+  buttonsRow: {
     flexDirection: "row",
     gap: 12,
-    marginBottom: 16,
   },
   dismissBtn: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
+    paddingVertical: 16,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#F3F4F6",
   },
   dismissText: {
     fontSize: 15,
     fontWeight: "600",
+    color: "#6B7280",
   },
   acceptBtn: {
     flex: 2,
-    paddingVertical: 14,
-    borderRadius: 12,
-    flexDirection: "row",
+    paddingVertical: 16,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    backgroundColor: "#111827",
+  },
+  acceptBtnUrgent: {
+    backgroundColor: "#EF4444",
   },
   acceptText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "700",
-  },
-  progressBg: {
-    height: 4,
-    borderRadius: 2,
-    overflow: "hidden",
-  },
-  progressBar: {
-    height: "100%",
-    borderRadius: 2,
+    letterSpacing: 0.1,
   },
 });

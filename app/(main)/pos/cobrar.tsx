@@ -1,4 +1,7 @@
+import TicketModal from "@/components/pos/TicketModal";
 import { useTheme, useThemeColors } from "@/context/theme-context";
+
+
 import {
     cancelNfcRead,
     CardInfo,
@@ -434,6 +437,8 @@ export default function CobrarScreen() {
   const [authError, setAuthError] = useState(false);
   const [successModalVisible, setSuccessModalVisible] = useState(false);
   const [successMethodLabel, setSuccessMethodLabel] = useState("");
+  const [ticketModalVisible, setTicketModalVisible] = useState(false);
+
 
   // ── NFC Pulse Animation ────────────────────────────────────────────────────
   const pulseScale = useSharedValue(1);
@@ -636,10 +641,8 @@ export default function CobrarScreen() {
 
   const handleSuccessDismiss = useCallback(() => {
     setSuccessModalVisible(false);
-    router.back();
-    setTimeout(() => {
-      router.setParams({ cleared: "1" });
-    }, 100);
+    // Go back and signal that the cart should be cleared
+    router.replace({ pathname: "/(main)/pos/nueva-venta", params: { cleared: "1" } });
   }, []);
 
   // ─── Keypad keys ───────────────────────────────────────────────────────────
@@ -2239,375 +2242,406 @@ export default function CobrarScreen() {
             entering={FadeInDown.duration(400).springify().damping(18)}
             style={[
               st.mdCard,
-              { backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF" },
+              { backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF", maxHeight: '90%' },
             ]}
           >
-            {/* Decorative top gradient bar */}
-            <LinearGradient
-              colors={["#34C759", "#30D158"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={st.mdTopBar}
-            />
-
-            {/* Success icon */}
-            <View style={[st.mdIconCircle, { backgroundColor: "#34C75912" }]}>
-              <View style={[st.mdIconInner, { backgroundColor: "#34C75920" }]}>
-                <Ionicons name="checkmark-circle" size={42} color="#34C759" />
-              </View>
-            </View>
-
-            <Text style={[st.mdTitle, { color: colors.text }]}>
-              ¡Venta Registrada!
-            </Text>
-            <Text style={[st.mdSubtitle, { color: colors.textTertiary }]}>
-              Operación completada exitosamente
-            </Text>
-
-            {/* Details card */}
-            <View
-              style={[
-                st.mdInfoCard,
-                {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.05)"
-                    : "rgba(0,0,0,0.025)",
-                },
-              ]}
+            <ScrollView 
+              showsVerticalScrollIndicator={false}
+              style={{ width: '100%' }}
+              contentContainerStyle={{ alignItems: 'center' }}
             >
-              <View style={st.mdInfoRow}>
-                <View
-                  style={[
-                    st.mdInfoIcon,
-                    {
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.06)"
-                        : "rgba(0,0,0,0.04)",
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name="person"
-                    size={14}
-                    color={colors.textSecondary}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text
-                    style={[st.mdInfoLabel, { color: colors.textTertiary }]}
-                  >
-                    Cliente
-                  </Text>
-                  <Text
-                    style={[st.mdInfoValue, { color: colors.text }]}
-                    numberOfLines={1}
-                  >
-                    {clientName}
-                  </Text>
+              {/* Decorative top gradient bar */}
+              <LinearGradient
+                colors={["#34C759", "#30D158"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={st.mdTopBar}
+              />
+
+              {/* Success icon */}
+              <View style={[st.mdIconCircle, { backgroundColor: "#34C75912" }]}>
+                <View style={[st.mdIconInner, { backgroundColor: "#34C75920" }]}>
+                  <Ionicons name="checkmark-circle" size={42} color="#34C759" />
                 </View>
               </View>
+
+              <Text style={[st.mdTitle, { color: colors.text }]}>
+                ¡Venta Registrada!
+              </Text>
+              <Text style={[st.mdSubtitle, { color: colors.textTertiary }]}>
+                Operación completada exitosamente
+              </Text>
+
+              {/* Details card */}
               <View
                 style={[
-                  st.mdInfoDivider,
+                  st.mdInfoCard,
                   {
                     backgroundColor: isDark
-                      ? "rgba(255,255,255,0.06)"
-                      : "rgba(0,0,0,0.05)",
+                      ? "rgba(255,255,255,0.05)"
+                      : "rgba(0,0,0,0.025)",
                   },
                 ]}
-              />
-              <View style={st.mdInfoRow}>
-                <View
-                  style={[
-                    st.mdInfoIcon,
-                    {
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.06)"
-                        : "rgba(0,0,0,0.04)",
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name="cube"
-                    size={14}
-                    color={colors.textSecondary}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text
-                    style={[st.mdInfoLabel, { color: colors.textTertiary }]}
-                  >
-                    Artículos
-                  </Text>
-                  <Text style={[st.mdInfoValue, { color: colors.text }]}>
-                    {count} artículos · {qty} piezas
-                  </Text>
-                </View>
-              </View>
-              <View
-                style={[
-                  st.mdInfoDivider,
-                  {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.06)"
-                      : "rgba(0,0,0,0.05)",
-                  },
-                ]}
-              />
-              <View style={st.mdInfoRow}>
-                <View
-                  style={[
-                    st.mdInfoIcon,
-                    {
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.06)"
-                        : "rgba(0,0,0,0.04)",
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name={
-                      method === "efectivo"
-                        ? "cash"
-                        : method === "tarjeta"
-                          ? "card"
-                          : "swap-horizontal"
-                    }
-                    size={14}
-                    color={colors.textSecondary}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text
-                    style={[st.mdInfoLabel, { color: colors.textTertiary }]}
-                  >
-                    Método de pago
-                  </Text>
-                  <Text style={[st.mdInfoValue, { color: colors.text }]}>
-                    {successMethodLabel}
-                  </Text>
-                </View>
-              </View>
-              {method === "efectivo" && change > 0 && (
-                <>
+              >
+                <View style={st.mdInfoRow}>
                   <View
                     style={[
-                      st.mdInfoDivider,
+                      st.mdInfoIcon,
                       {
                         backgroundColor: isDark
                           ? "rgba(255,255,255,0.06)"
-                          : "rgba(0,0,0,0.05)",
+                          : "rgba(0,0,0,0.04)",
                       },
                     ]}
-                  />
-                  <View style={st.mdInfoRow}>
-                    <View
-                      style={[st.mdInfoIcon, { backgroundColor: "#FF9F0A12" }]}
-                    >
-                      <Ionicons name="arrow-undo" size={14} color="#FF9F0A" />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        style={[st.mdInfoLabel, { color: colors.textTertiary }]}
-                      >
-                        Cambio
-                      </Text>
-                      <Text
-                        style={[
-                          st.mdInfoValue,
-                          { color: "#FF9F0A", fontWeight: "800" },
-                        ]}
-                      >
-                        {fmt(change)}
-                      </Text>
-                    </View>
-                    <View style={st.mdChangeBadge}>
-                      <Text style={st.mdChangeBadgeTxt}>
-                        Recibido {fmt(received)}
-                      </Text>
-                    </View>
+                  >
+                    <Ionicons
+                      name="person"
+                      size={14}
+                      color={colors.textSecondary}
+                    />
                   </View>
-                </>
-              )}
-              {method === "tarjeta" && cardInfo && (
-                <>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[st.mdInfoLabel, { color: colors.textTertiary }]}
+                    >
+                      Cliente
+                    </Text>
+                    <Text
+                      style={[st.mdInfoValue, { color: colors.text }]}
+                      numberOfLines={1}
+                    >
+                      {clientName}
+                    </Text>
+                  </View>
+                </View>
+                <View
+                  style={[
+                    st.mdInfoDivider,
+                    {
+                      backgroundColor: isDark
+                        ? "rgba(255,255,255,0.06)"
+                        : "rgba(0,0,0,0.05)",
+                    },
+                  ]}
+                />
+                <View style={st.mdInfoRow}>
                   <View
                     style={[
-                      st.mdInfoDivider,
+                      st.mdInfoIcon,
                       {
                         backgroundColor: isDark
                           ? "rgba(255,255,255,0.06)"
-                          : "rgba(0,0,0,0.05)",
+                          : "rgba(0,0,0,0.04)",
                       },
                     ]}
-                  />
-                  <View style={st.mdInfoRow}>
+                  >
+                    <Ionicons
+                      name="cube"
+                      size={14}
+                      color={colors.textSecondary}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[st.mdInfoLabel, { color: colors.textTertiary }]}
+                    >
+                      Artículos
+                    </Text>
+                    <Text style={[st.mdInfoValue, { color: colors.text }]}>
+                      {count} artículos · {qty} piezas
+                    </Text>
+                  </View>
+                </View>
+                <View
+                  style={[
+                    st.mdInfoDivider,
+                    {
+                      backgroundColor: isDark
+                        ? "rgba(255,255,255,0.06)"
+                        : "rgba(0,0,0,0.05)",
+                    },
+                  ]}
+                />
+                <View style={st.mdInfoRow}>
+                  <View
+                    style={[
+                      st.mdInfoIcon,
+                      {
+                        backgroundColor: isDark
+                          ? "rgba(255,255,255,0.06)"
+                          : "rgba(0,0,0,0.04)",
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      name={
+                        method === "efectivo"
+                          ? "cash"
+                          : method === "tarjeta"
+                            ? "card"
+                            : "swap-horizontal"
+                      }
+                      size={14}
+                      color={colors.textSecondary}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[st.mdInfoLabel, { color: colors.textTertiary }]}
+                    >
+                      Método de pago
+                    </Text>
+                    <Text style={[st.mdInfoValue, { color: colors.text }]}>
+                      {successMethodLabel}
+                    </Text>
+                  </View>
+                </View>
+                {method === "efectivo" && change > 0 && (
+                  <>
                     <View
                       style={[
-                        st.mdInfoIcon,
+                        st.mdInfoDivider,
                         {
                           backgroundColor: isDark
                             ? "rgba(255,255,255,0.06)"
-                            : "rgba(0,0,0,0.04)",
+                            : "rgba(0,0,0,0.05)",
                         },
                       ]}
-                    >
-                      <Ionicons
-                        name="card"
-                        size={14}
-                        color={colors.textSecondary}
-                      />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        style={[st.mdInfoLabel, { color: colors.textTertiary }]}
+                    />
+                    <View style={st.mdInfoRow}>
+                      <View
+                        style={[st.mdInfoIcon, { backgroundColor: "#FF9F0A12" }]}
                       >
-                        Tarjeta
-                      </Text>
-                      <Text style={[st.mdInfoValue, { color: colors.text }]}>
-                        {cardInfo.label} •••• {cardInfo.lastFour}
-                      </Text>
+                        <Ionicons name="arrow-undo" size={14} color="#FF9F0A" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[st.mdInfoLabel, { color: colors.textTertiary }]}
+                        >
+                          Cambio
+                        </Text>
+                        <Text
+                          style={[
+                            st.mdInfoValue,
+                            { color: "#FF9F0A", fontWeight: "800" },
+                          ]}
+                        >
+                          {fmt(change)}
+                        </Text>
+                      </View>
+                      <View style={st.mdChangeBadge}>
+                        <Text style={st.mdChangeBadgeTxt}>
+                          Recibido {fmt(received)}
+                        </Text>
+                      </View>
                     </View>
-                  </View>
-                </>
-              )}
-              {method === "transferencia" && (
-                <>
-                  <View
-                    style={[
-                      st.mdInfoDivider,
-                      {
-                        backgroundColor: isDark
-                          ? "rgba(255,255,255,0.06)"
-                          : "rgba(0,0,0,0.05)",
-                      },
-                    ]}
-                  />
-                  <View style={st.mdInfoRow}>
+                  </>
+                )}
+                {method === "tarjeta" && cardInfo && (
+                  <>
                     <View
                       style={[
-                        st.mdInfoIcon,
-                        { backgroundColor: selectedBank.color + "15" },
+                        st.mdInfoDivider,
+                        {
+                          backgroundColor: isDark
+                            ? "rgba(255,255,255,0.06)"
+                            : "rgba(0,0,0,0.05)",
+                        },
                       ]}
-                    >
-                      <Ionicons
-                        name="business"
-                        size={14}
-                        color={selectedBank.color}
-                      />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        style={[st.mdInfoLabel, { color: colors.textTertiary }]}
+                    />
+                    <View style={st.mdInfoRow}>
+                      <View
+                        style={[
+                          st.mdInfoIcon,
+                          {
+                            backgroundColor: isDark
+                              ? "rgba(255,255,255,0.06)"
+                              : "rgba(0,0,0,0.04)",
+                          },
+                        ]}
                       >
-                        Banco
-                      </Text>
-                      <Text style={[st.mdInfoValue, { color: colors.text }]}>
-                        {selectedBank.bank}
-                      </Text>
+                        <Ionicons
+                          name="card"
+                          size={14}
+                          color={colors.textSecondary}
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[st.mdInfoLabel, { color: colors.textTertiary }]}
+                        >
+                          Tarjeta
+                        </Text>
+                        <Text style={[st.mdInfoValue, { color: colors.text }]}>
+                          {cardInfo.label} •••• {cardInfo.lastFour}
+                        </Text>
+                      </View>
                     </View>
+                  </>
+                )}
+                {method === "transferencia" && (
+                  <>
+                    <View
+                      style={[
+                        st.mdInfoDivider,
+                        {
+                          backgroundColor: isDark
+                            ? "rgba(255,255,255,0.06)"
+                            : "rgba(0,0,0,0.05)",
+                        },
+                      ]}
+                    />
+                    <View style={st.mdInfoRow}>
+                      <View
+                        style={[st.mdInfoIcon, { backgroundColor: selectedBank.color + "15" }]}
+                      >
+                        <Ionicons
+                          name="business"
+                          size={14}
+                          color={selectedBank.color}
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[st.mdInfoLabel, { color: colors.textTertiary }]}
+                        >
+                          Banco
+                        </Text>
+                        <Text style={[st.mdInfoValue, { color: colors.text }]}>
+                          {selectedBank.bank}
+                        </Text>
+                      </View>
+                    </View>
+                  </>
+                )}
+              </View>
+
+              {/* Total hero */}
+              <View style={st.mdTotalRow}>
+                <Text style={[st.mdTotalLabel, { color: colors.textTertiary }]}>
+                  Total cobrado
+                </Text>
+                <Text style={[st.mdTotalValue, { color: "#34C759" }]}>
+                  {fmt(total)}
+                </Text>
+              </View>
+
+              <TouchableOpacity 
+                style={st.mdCloseBtn} 
+                onPress={handleSuccessDismiss}
+              >
+                <Ionicons name="close-circle" size={28} color={colors.textTertiary + '80'} />
+              </TouchableOpacity>
+
+              {/* Action buttons — Ticket & Factura */}
+              <View style={st.mdActionsRow}>
+                <TouchableOpacity
+                  style={[
+                    st.mdActionBtn,
+                    {
+                      backgroundColor: isDark
+                        ? "rgba(255,255,255,0.06)"
+                        : "rgba(0,0,0,0.03)",
+                    },
+                  ]}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setTicketModalVisible(true);
+                  }}
+
+                >
+                  <View
+                    style={[
+                      st.mdActionIconWrap,
+                      { backgroundColor: "#007AFF14" },
+                    ]}
+                  >
+                    <Ionicons name="receipt-outline" size={20} color="#007AFF" />
                   </View>
-                </>
-              )}
-            </View>
+                  <Text style={[st.mdActionLabel, { color: colors.text }]}>
+                    Ticket
+                  </Text>
+                  <Text style={[st.mdActionHint, { color: colors.textTertiary }]}>
+                    Imprimir
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    st.mdActionBtn,
+                    {
+                      backgroundColor: isDark
+                        ? "rgba(255,255,255,0.06)"
+                        : "rgba(0,0,0,0.03)",
+                    },
+                  ]}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    // TODO: generar factura
+                  }}
+                >
+                  <View
+                    style={[
+                      st.mdActionIconWrap,
+                      { backgroundColor: "#5856D614" },
+                    ]}
+                  >
+                    <Ionicons
+                      name="document-text-outline"
+                      size={20}
+                      color="#5856D6"
+                    />
+                  </View>
+                  <Text style={[st.mdActionLabel, { color: colors.text }]}>
+                    Facturar
+                  </Text>
+                  <Text style={[st.mdActionHint, { color: colors.textTertiary }]}>
+                    CFDI
+                  </Text>
+                </TouchableOpacity>
+              </View>
 
-            {/* Total hero */}
-            <View style={st.mdTotalRow}>
-              <Text style={[st.mdTotalLabel, { color: colors.textTertiary }]}>
-                Total cobrado
-              </Text>
-              <Text style={[st.mdTotalValue, { color: "#34C759" }]}>
-                {fmt(total)}
-              </Text>
-            </View>
-
-            {/* Action buttons — Ticket & Factura */}
-            <View style={st.mdActionsRow}>
+              {/* Close — green master button */}
               <TouchableOpacity
                 style={[
-                  st.mdActionBtn,
+                  st.mdBtnFull,
+                  st.mdBtnSuccess,
                   {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.06)"
-                      : "rgba(0,0,0,0.03)",
+                    marginHorizontal: 20,
+                    marginBottom: 24,
+                    alignSelf: "stretch",
                   },
                 ]}
                 activeOpacity={0.7}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  // TODO: generar ticket
-                }}
+                onPress={handleSuccessDismiss}
               >
-                <View
-                  style={[
-                    st.mdActionIconWrap,
-                    { backgroundColor: "#007AFF14" },
-                  ]}
-                >
-                  <Ionicons name="receipt-outline" size={20} color="#007AFF" />
-                </View>
-                <Text style={[st.mdActionLabel, { color: colors.text }]}>
-                  Ticket
-                </Text>
-                <Text style={[st.mdActionHint, { color: colors.textTertiary }]}>
-                  Imprimir
-                </Text>
+                <Text style={[st.mdBtnLabel, { color: "#fff" }]}>Finalizar</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  st.mdActionBtn,
-                  {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.06)"
-                      : "rgba(0,0,0,0.03)",
-                  },
-                ]}
-                activeOpacity={0.7}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  // TODO: generar factura
-                }}
-              >
-                <View
-                  style={[
-                    st.mdActionIconWrap,
-                    { backgroundColor: "#5856D614" },
-                  ]}
-                >
-                  <Ionicons
-                    name="document-text-outline"
-                    size={20}
-                    color="#5856D6"
-                  />
-                </View>
-                <Text style={[st.mdActionLabel, { color: colors.text }]}>
-                  Facturar
-                </Text>
-                <Text style={[st.mdActionHint, { color: colors.textTertiary }]}>
-                  CFDI
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Close — green master button */}
-            <TouchableOpacity
-              style={[
-                st.mdBtnFull,
-                st.mdBtnSuccess,
-                {
-                  marginHorizontal: 20,
-                  marginBottom: 24,
-                  alignSelf: "stretch",
-                },
-              ]}
-              activeOpacity={0.7}
-              onPress={handleSuccessDismiss}
-            >
-              <Text style={[st.mdBtnLabel, { color: "#fff" }]}>Cerrar</Text>
-            </TouchableOpacity>
+            </ScrollView>
           </Animated.View>
         </View>
       </Modal>
+
+      <TicketModal
+        visible={ticketModalVisible}
+        onClose={() => setTicketModalVisible(false)}
+        ticketData={{
+          folio: `V-${new Date().getTime().toString().slice(-6)}`,
+          fecha: new Date().toLocaleString(),
+          cliente: clientName,
+          items: cartItems.map((it) => ({
+            clave: it.clave,
+            descripcion: it.descripcion,
+            cantidad: it.cantidad,
+            precio: it.precio,
+          })),
+          total: total,
+          metodoPago: successMethodLabel || method,
+          recibido: method === "efectivo" ? received : total,
+          cambio: method === "efectivo" ? change : 0,
+        }}
+      />
 
       {/* ── Bottom slide-to-confirm ────────────────────────────────────── */}
       <View
@@ -3672,6 +3706,11 @@ const st = StyleSheet.create({
     gap: 8,
     height: 52,
     borderRadius: 14,
+  },
+  mdCloseBtn: {
+    position: "absolute",
+    top: 20,
+    right: 20,
   },
   mdBtnAccent: {
     backgroundColor: "#FF9F0A",
