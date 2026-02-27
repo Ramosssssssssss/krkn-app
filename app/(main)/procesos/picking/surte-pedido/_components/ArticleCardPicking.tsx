@@ -1,3 +1,4 @@
+import ImageGallery from "@/components/ImageGallery";
 import { API_CONFIG } from "@/config/api";
 import { getCurrentDatabaseId } from "@/services/api";
 import { Ionicons } from "@expo/vector-icons";
@@ -6,7 +7,6 @@ import * as Haptics from "expo-haptics";
 import React, { useState } from "react";
 import {
     Dimensions,
-    Image,
     Modal,
     StyleSheet,
     Text,
@@ -16,6 +16,7 @@ import {
 } from "react-native";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+const isSmallDevice = SCREEN_HEIGHT < 750;
 
 // ==================== TIPOS ====================
 interface Articulo {
@@ -50,7 +51,6 @@ export function ArticleCardPicking({
 }: ArticleCardPickingProps) {
   const [showQtyModal, setShowQtyModal] = useState(false);
   const [localQty, setLocalQty] = useState(item.SURTIDAS.toString());
-  const [imgError, setImgError] = useState(false);
   const databaseId = getCurrentDatabaseId();
 
   const isComplete = item.SURTIDAS >= item.UNIDADES;
@@ -82,34 +82,18 @@ export function ArticleCardPicking({
           { backgroundColor: colors.background },
         ]}
       >
-        {!imgError && (item.IMAGEN_BASE64 || imageUrl) ? (
-          <Image
-            source={
-              item.IMAGEN_BASE64
-                ? { uri: `data:image/jpeg;base64,${item.IMAGEN_BASE64}` }
-                : { uri: imageUrl || "" }
-            }
-            style={styles.heroImage}
-            resizeMode="contain"
-            onError={() => setImgError(true)}
-          />
-        ) : (
-          <View
-            style={[
-              styles.heroImage,
-              { justifyContent: "center", alignItems: "center" },
-            ]}
-          >
-            <Ionicons
-              name="cube-outline"
-              size={120}
-              color={colors.textTertiary || "#9CA3AF"}
-            />
-          </View>
-        )}
+        <ImageGallery
+          databaseId={databaseId || 1}
+          articuloId={parseInt(item.ARTICULO_ID || "0", 10)}
+          clave={item.CLAVE_ARTICULO}
+          nombre={item.NOMBRE}
+          unidadVenta={item.UNIDAD_VENTA}
+          height="100%"
+        />
 
         {/* Location Badge Floating */}
         <View
+          pointerEvents="none"
           style={[
             styles.floatingLoc,
             {
@@ -203,7 +187,10 @@ export function ArticleCardPicking({
         {/* Big Action Buttons */}
         <View style={styles.actionGrid}>
           <TouchableOpacity
-            style={[styles.mainActionBtn, { backgroundColor: colors.border }]}
+            style={[
+              styles.mainActionBtn,
+              { backgroundColor: item.SURTIDAS > 0 ? "#EF4444" : colors.border },
+            ]}
             onPress={() => {
               if (isLocked) {
                 Haptics.notificationAsync(
@@ -214,39 +201,39 @@ export function ArticleCardPicking({
               if (item.SURTIDAS > 0) onUpdateQuantity(-1);
             }}
           >
-            <Ionicons name="remove" size={20} color={colors.text} />
+            <Ionicons name="remove" size={20} color="#fff" />
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[
               styles.confirmCircle,
               {
-                backgroundColor: isComplete
-                  ? "#D1D5DB"
-                  : item.CONFIRMADO
-                    ? item.SURTIDAS === 0
-                      ? "#F59E0B" // Naranja si confirmó 0 para que se note
+                backgroundColor: item.CONFIRMADO
+                  ? isComplete
+                    ? "#D1D5DB"
+                    : item.SURTIDAS === 0
+                      ? "#F59E0B"
                       : "#6B7280"
-                    : "#10B981",
-                shadowColor: isComplete ? "transparent" : "#10B981",
+                  : "#10B981",
+                shadowColor: !item.CONFIRMADO ? "#10B981" : "transparent",
               },
             ]}
-            onPress={() => !isLocked && !isComplete && onConfirm()}
-            disabled={isLocked || isComplete}
+            onPress={() => !isLocked && onConfirm()}
+            disabled={isLocked}
           >
-              <Ionicons
-                name={
-                  isComplete
+            <Ionicons
+              name={
+                item.CONFIRMADO
+                  ? isComplete
                     ? "checkmark-done-circle"
-                    : item.CONFIRMADO
-                      ? item.SURTIDAS === 0
-                        ? "alert-circle-outline"
-                        : "refresh-outline"
-                      : "checkmark"
-                }
-                size={26}
-                color={isComplete ? "#9CA3AF" : "#fff"}
-              />
+                    : item.SURTIDAS === 0
+                      ? "alert-circle-outline"
+                      : "refresh-outline"
+                  : "checkmark"
+              }
+              size={26}
+              color={item.CONFIRMADO && isComplete ? "#9CA3AF" : "#fff"}
+            />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -424,7 +411,7 @@ export function ArticleCardPicking({
 const styles = StyleSheet.create({
   cardContainer: {
     width: SCREEN_WIDTH - 32,
-    height: SCREEN_HEIGHT * 0.58,
+    height: isSmallDevice ? SCREEN_HEIGHT * 0.70 : SCREEN_HEIGHT * 0.58, 
     borderRadius: 20,
     overflow: "hidden",
     shadowColor: "#000",
@@ -435,7 +422,7 @@ const styles = StyleSheet.create({
     marginVertical: 10,
   },
   heroImageContainer: {
-    height: "30%",
+    height: isSmallDevice ? "28%" : "45%", 
     justifyContent: "center",
     alignItems: "center",
     position: "relative",
@@ -466,7 +453,7 @@ const styles = StyleSheet.create({
   },
   cardInfo: {
     flex: 1,
-    padding: 16,
+    padding: isSmallDevice ? 8 : 12,
     justifyContent: "space-between",
   },
   cardClave: {
@@ -475,15 +462,15 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   cardName: {
-    fontSize: 16,
+    fontSize: isSmallDevice ? 12 : 14, 
     fontWeight: "800",
-    lineHeight: 20,
+    lineHeight: isSmallDevice ? 15 : 18,
   },
   statsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     backgroundColor: "rgba(0,0,0,0.02)",
-    padding: 10,
+    padding: isSmallDevice ? 6 : 8, 
     borderRadius: 14,
   },
   statItem: {
@@ -500,7 +487,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   statValue: {
-    fontSize: 15,
+    fontSize: isSmallDevice ? 13 : 15,
     fontWeight: "900",
   },
   qtyIndicator: {
@@ -515,19 +502,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingTop: 6,
+    paddingTop: isSmallDevice ? 2 : 4,
   },
   mainActionBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: isSmallDevice ? 38 : 48,
+    height: isSmallDevice ? 38 : 48,
+    borderRadius: isSmallDevice ? 19 : 24,
     justifyContent: "center",
     alignItems: "center",
   },
   confirmCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: isSmallDevice ? 46 : 64,
+    height: isSmallDevice ? 46 : 64,
+    borderRadius: isSmallDevice ? 23 : 32,
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#10B981",

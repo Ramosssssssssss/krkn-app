@@ -94,6 +94,13 @@ export interface DoctoInvfis {
   USUARIO: string;
 }
 
+export interface UsuarioKrkn {
+  USER_ID: number;
+  USERNAME: string;
+  NOMBRE_COMPLETO: string;
+  ROLE_ID: number | null;
+}
+
 export interface GetDoctosInvfisResponse {
   ok: boolean;
   count: number;
@@ -530,7 +537,8 @@ export async function crearInventarioFisico(
 export async function getDoctosInvfisSemana(
   start?: string,
   end?: string,
-  pending?: boolean
+  pending?: boolean,
+  status?: string
 ): Promise<DoctoInvfis[]> {
   const databaseId = getCurrentDatabaseId();
 
@@ -543,6 +551,7 @@ export async function getDoctosInvfisSemana(
   if (start) queryParams.append('start', start);
   if (end) queryParams.append('end', end);
   if (pending !== undefined) queryParams.append('pending', pending.toString());
+  if (status) queryParams.append('status', status);
 
   const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.DOCTOS_INVFIS_SEMANA}?${queryParams.toString()}`, {
     method: 'GET',
@@ -819,9 +828,17 @@ export async function createLineaArticulo(
 export interface ArticuloUbicacion {
   ARTICULO_ID: number;
   CLAVE_ARTICULO: string;
+  CODIGO_BARRAS?: string;
   NOMBRE: string;
-  UMED: string;
+  UMED?: string;
   LOCALIZACION: string;
+  EXISTENCIA: number;
+  CLASE: string;
+  ESTATUS: string;
+  DIAS_QUIEBRE: number;
+  INV_MAX: number;
+  INV_MIN: number;
+  PUNTO_REORDEN: number;
 }
 
 export interface BuscarArticulosUbicacionResponse {
@@ -873,4 +890,166 @@ export async function buscarArticulosPorUbicacion(
   }
 
   return data;
+}
+
+/**
+ * Obtiene lista de usuarios del sistema
+ */
+export async function getUsuariosKrkn(companyCode: string): Promise<UsuarioKrkn[]> {
+  const response = await fetch(`${API_CONFIG.BASE_URL}/api/usuarios-krkn.php?companyCode=${companyCode}`);
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  }
+  const data = await response.json();
+  if (!data.ok) {
+    throw new Error(data.message || 'Error al obtener usuarios');
+  }
+  return data.users || [];
+}
+
+/**
+ * Solicita aprobación para un inventario físico
+ */
+export async function solicitarAprobacionInventario(
+  folio: string,
+  usuarioSolicita: string,
+  approverId?: number,
+  companyCode?: string
+): Promise<{ ok: boolean; message: string }> {
+  const databaseId = getCurrentDatabaseId();
+
+  if (!databaseId) {
+    throw new Error('No hay base de datos seleccionada');
+  }
+
+  const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.SOLICITAR_APROBACION_INVFIS}`, {
+    method: 'POST',
+    headers: {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      databaseId,
+      folio,
+      usuario: usuarioSolicita,
+      approverId,
+      companyCode
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+
+  if (!data.ok) {
+    throw new Error(data.message || 'Error al solicitar aprobación');
+  }
+
+  return data;
+}
+
+/**
+ * Responde a una solicitud de aprobación (Aprobar/Rechazar)
+ */
+export async function responderAprobacionInventario(
+  folio: string,
+  accion: 'APROBAR' | 'RECHAZAR',
+  usuario?: string
+): Promise<{ ok: boolean; message: string }> {
+  const databaseId = getCurrentDatabaseId();
+
+  if (!databaseId) {
+    throw new Error('No hay base de datos seleccionada');
+  }
+
+  const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.RESPONDER_APROBACION_INVFIS}`, {
+    method: 'POST',
+    headers: {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      databaseId,
+      folio,
+      accion,
+      usuario: usuario || 'SISTEMA'
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+
+  if (!data.ok) {
+    throw new Error(data.message || 'Error al procesar respuesta');
+  }
+
+  return data;
+}
+
+/**
+ * Obtiene los días de quiebre para una ubicación (solo para los que tienen existencia 0)
+ */
+export async function getQuiebresPorUbicacion(
+  localizacion: string,
+  almacenId: number
+): Promise<{ ok: boolean; quiebres: Record<string, number> }> {
+  const databaseId = getCurrentDatabaseId();
+  if (!databaseId) throw new Error('No hay base de datos seleccionada');
+
+  const queryParams = new URLSearchParams();
+  queryParams.append('databaseId', databaseId.toString());
+  queryParams.append('localizacion', localizacion);
+  queryParams.append('almacen_id', almacenId.toString());
+
+  const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.GET_QUIEBRES_UBICACION}?${queryParams.toString()}`);
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+  return await response.json();
+}
+
+/**
+ * Obtiene existencia y estatus para una ubicación
+ */
+export async function getInventarioPorUbicacion(
+  localizacion: string,
+  almacenId: number
+): Promise<{ ok: boolean; inventario: Record<string, { EXISTENCIA: number; ESTATUS: string }> }> {
+  const databaseId = getCurrentDatabaseId();
+  if (!databaseId) throw new Error('No hay base de datos seleccionada');
+
+  const queryParams = new URLSearchParams();
+  queryParams.append('databaseId', databaseId.toString());
+  queryParams.append('localizacion', localizacion);
+  queryParams.append('almacen_id', almacenId.toString());
+
+  const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.GET_INVENTARIO_UBICACION}?${queryParams.toString()}`);
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+  return await response.json();
+}
+
+/**
+ * Obtiene las clases de clasificación para una ubicación
+ */
+export async function getClasesPorUbicacion(
+  localizacion: string,
+  almacenId: number
+): Promise<{ ok: boolean; clases: Record<number, string> }> {
+  const databaseId = getCurrentDatabaseId();
+  if (!databaseId) throw new Error('No hay base de datos seleccionada');
+
+  const queryParams = new URLSearchParams();
+  queryParams.append('databaseId', databaseId.toString());
+  queryParams.append('localizacion', localizacion);
+  queryParams.append('almacen_id', almacenId.toString());
+
+  const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.GET_CLASES_UBICACION}?${queryParams.toString()}`);
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+  return await response.json();
 }

@@ -5,10 +5,10 @@ import { useTheme, useThemeColors } from "@/context/theme-context";
 import { getCurrentDatabaseId } from "@/services/api";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+    ActivityIndicator,
     Animated,
     Modal,
     RefreshControl,
@@ -31,6 +31,7 @@ interface Traspaso {
   HORA: string;
   ARTICULOS: number;
   PRIORIDAD?: "ALTA" | "MEDIA" | "BAJA";
+  ESTATUS?: string;
 }
 
 export default function TraspasosScreen() {
@@ -43,10 +44,11 @@ export default function TraspasosScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [traspasos, setTraspasos] = useState<Traspaso[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [alert, setAlert] = useState<{ visible: boolean; message: string }>({
+  const [alert, setAlert] = useState({
     visible: false,
     message: "",
   });
+  const [sessionsExpanded, setSessionsExpanded] = useState(false);
 
   const scrollY = useRef(new Animated.Value(0)).current;
 
@@ -58,10 +60,11 @@ export default function TraspasosScreen() {
   const fetchTraspasos = useCallback(async () => {
     try {
       const databaseId = getCurrentDatabaseId();
+      const pikerId = user?.USUARIO_ID || 1;
       const response = await fetch(`${API_URL}/api/traspasos.php`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ databaseId }),
+        body: JSON.stringify({ databaseId, pikerId }),
       });
       const data = await response.json();
 
@@ -94,11 +97,25 @@ export default function TraspasosScreen() {
   };
 
   const handleTakeTraspaso = async (traspaso: Traspaso) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    setLoading(true);
+    const pikerId = user?.USUARIO_ID || 1;
+
+    // Si ya está tomada por mí, ir directo al surtido
+    if (traspaso.ESTATUS === 'T') {
+      router.push({
+        pathname: "/(main)/procesos/picking/surte-traspaso",
+        params: {
+          folio: limpiarFolio(traspaso.FOLIO),
+          traspasoInId: traspaso.TRASPASO_IN_ID,
+          almacenOrigen: traspaso.ALMACEN_ORIGEN || "",
+          almacenDestino: traspaso.ALMACEN_DESTINO || "",
+        },
+      });
+      setLoading(false);
+      return;
+    }
+
     try {
       const databaseId = getCurrentDatabaseId();
-      const pikerId = user?.USUARIO_ID || 1;
       const ahora = new Date();
       const fechaIni = ahora.toISOString().split("T")[0];
       const horaIni = ahora.toTimeString().split(" ")[0].slice(0, 5);
@@ -141,7 +158,10 @@ export default function TraspasosScreen() {
     }
   };
 
-  const filtered = traspasos.filter(
+  const resumableOrders = traspasos.filter(t => t.ESTATUS === 'T');
+  const pendingOrders = traspasos.filter(t => t.ESTATUS === 'P' || !t.ESTATUS);
+
+  const filtered = pendingOrders.filter(
     (t) =>
       (t.FOLIO || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
       (t.ALMACEN_DESTINO || "")
@@ -184,9 +204,16 @@ export default function TraspasosScreen() {
             </Text>
           </View>
           <View style={styles.orderFolioRow}>
-            <Text style={[styles.orderFolio, { color: colors.text }]}>
-              {limpiarFolio(item.FOLIO)}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Text style={[styles.orderFolio, { color: colors.text }]}>
+                {limpiarFolio(item.FOLIO)}
+                </Text>
+                {item.ESTATUS === 'T' && (
+                    <View style={styles.retomarBadge}>
+                        <Text style={styles.retomarBadgeText}>RETOMAR</Text>
+                    </View>
+                )}
+            </View>
             <Ionicons
               name="chevron-forward"
               size={18}
@@ -309,11 +336,62 @@ export default function TraspasosScreen() {
                     { color: colors.textSecondary },
                   ]}
                 >
-                  {traspasos.length} pendientes
+                  {pendingOrders.length} disponibles
                 </Text>
               </View>
               <View style={{ width: 40 }} />
             </View>
+
+            {/* Resumable Picks Section (Collapsible Dropdown) */}
+            {resumableOrders.length > 0 && (
+                <View style={styles.activeSessionsContainer}>
+                    <TouchableOpacity 
+                        style={[styles.activeSessionsHeader, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)', padding: 12, borderRadius: 12 }]}
+                        onPress={() => setSessionsExpanded(!sessionsExpanded)}
+                        activeOpacity={0.7}
+                    >
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                            <View style={styles.activeIndicator} />
+                            <Text style={[styles.activeSessionsTitle, { color: colors.text }]}>
+                                Sesiones activas ({resumableOrders.length})
+                            </Text>
+                        </View>
+                        <Ionicons 
+                            name={sessionsExpanded ? "chevron-up" : "chevron-down"} 
+                            size={20} 
+                            color={colors.textTertiary} 
+                        />
+                    </TouchableOpacity>
+
+                    {sessionsExpanded && (
+                        <View style={[styles.activePillsRow, { marginTop: 10 }]}>
+                            {resumableOrders.map((order) => (
+                                <TouchableOpacity
+                                    key={order.TRASPASO_IN_ID}
+                                    style={[styles.activePillCard, { backgroundColor: colors.surface, borderColor: colors.accent }]}
+                                    onPress={() => handleTakeTraspaso(order)}
+                                    activeOpacity={0.8}
+                                >
+                                    <View style={styles.activePillInfo}>
+                                        <View style={[styles.activeIconCircle, { backgroundColor: colors.accent + '20' }]}>
+                                            <Ionicons name="play" size={16} color={colors.accent} />
+                                        </View>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={[styles.activePillFolio, { color: colors.text }]} numberOfLines={1}>
+                                                {limpiarFolio(order.FOLIO)}
+                                            </Text>
+                                            <Text style={[styles.activePillSub, { color: colors.textSecondary }]} numberOfLines={1}>
+                                                {order.ALMACEN_DESTINO}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                    <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    )}
+                </View>
+            )}
 
             {/* Search */}
             <View
@@ -323,6 +401,7 @@ export default function TraspasosScreen() {
                   backgroundColor: isDark
                     ? "rgba(255,255,255,0.06)"
                     : "rgba(0,0,0,0.04)",
+                  marginTop: 16,
                 },
               ]}
             >
@@ -424,6 +503,17 @@ export default function TraspasosScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Transition Loading Overlay */}
+      <Modal visible={loading && traspasos.length > 0} transparent animationType="fade">
+        <View style={[styles.loadingOverlay, { backgroundColor: 'rgba(0,0,0,0.4)' }]}>
+          <BlurView intensity={80} style={StyleSheet.absoluteFill} tint="dark" />
+          <View style={styles.loaderContent}>
+            <ActivityIndicator size="large" color="#fff" />
+            <Text style={styles.loaderText}>Abriendo traspaso...</Text>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -516,6 +606,17 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: -0.5,
   },
+  retomarBadge: {
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  retomarBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '900',
+  },
   orderDesc: {
     fontSize: 14,
     fontWeight: "500",
@@ -568,12 +669,21 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  // ─── Loading ─────────────────────────────────────────────────────────
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: "center",
     alignItems: "center",
-    zIndex: 1000,
+    zIndex: 9999,
+  },
+  loaderContent: {
+    alignItems: 'center',
+    gap: 15,
+  },
+  loaderText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: -0.2,
   },
 
   // ─── iOS Alert ───────────────────────────────────────────────────────
@@ -601,7 +711,64 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 14,
+    marginBottom: 16,
+  },
+  // ─── Active Sessions ────────────────────────────────────────────────
+  activeSessionsContainer: {
+    marginTop: 8,
+    paddingBottom: 8,
+  },
+  activeSessionsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  activeIndicator: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+  },
+  activeSessionsTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    opacity: 0.7,
+  },
+  activePillsRow: {
+    gap: 10,
+  },
+  activePillCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1.5,
+  },
+  activePillInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  activeIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  activePillFolio: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  activePillSub: {
+    fontSize: 11,
+    fontWeight: '500',
+    maxWidth: 200,
   },
   alertTitle: {
     fontSize: 18,

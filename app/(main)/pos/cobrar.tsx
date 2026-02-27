@@ -1,7 +1,7 @@
 import TicketModal from "@/components/pos/TicketModal";
+import { usePOS } from "@/context/pos/pos-context";
 import { useTheme, useThemeColors } from "@/context/theme-context";
-
-
+import { apiRequest, getCurrentDatabaseId } from "@/services/api";
 import {
     cancelNfcRead,
     CardInfo,
@@ -22,6 +22,7 @@ import React, {
     useState,
 } from "react";
 import {
+    Alert,
     Dimensions,
     FlatList,
     Modal,
@@ -106,6 +107,7 @@ const fmtInt = (n: number): string =>
     .replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 
 interface CartSummaryItem {
+  articuloId: number;
   clave: string;
   descripcion: string;
   cantidad: number;
@@ -391,9 +393,14 @@ export default function CobrarScreen() {
     count: string;
     qty: string;
     client: string;
+    clientId: string;
+    clientClave: string;
     savings: string;
     items: string;
   }>();
+
+  const { selectedCaja, selectedCajero, sucursalId } = usePOS();
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const total = parseFloat(params.total || "0");
   const count = parseInt(params.count || "0", 10);
@@ -438,6 +445,20 @@ export default function CobrarScreen() {
   const [successModalVisible, setSuccessModalVisible] = useState(false);
   const [successMethodLabel, setSuccessMethodLabel] = useState("");
   const [ticketModalVisible, setTicketModalVisible] = useState(false);
+  const [lastSaleInfo, setLastSaleInfo] = useState<{
+    folio: string;
+    items: any[];
+    total: number;
+    cliente: string;
+    metodoPago: string;
+    fecha: string;
+    hora: string;
+  } | null>(null);
+  const [formasCobroIds, setFormasCobroIds] = useState<Record<string, number>>({
+    efectivo: 67, 
+    tarjeta: 395564,
+    transferencia: 395565
+  });
 
 
   // ── NFC Pulse Animation ────────────────────────────────────────────────────
@@ -506,6 +527,28 @@ export default function CobrarScreen() {
       stopPulseAnimation();
     }
   }, [method, nfcAvailable, cardInfo]);
+
+  useEffect(() => {
+    const fetchFormas = async () => {
+      try {
+        const res = await apiRequest<any[]>("api/POS/formas-cobro.php", { method: "POST" });
+        if (res.success && res.data) {
+          const mapping: Record<string, number> = {};
+          res.data.forEach((f: any) => {
+            const name = f.NOMBRE.toLowerCase();
+            if (name.includes('efectivo')) mapping.efectivo = f.ID;
+            if (name.includes('tarjeta') && (name.includes('débito') || name.includes('debito'))) mapping.tarjeta = f.ID;
+            if (name.includes('tarjeta') && !mapping.tarjeta) mapping.tarjeta = f.ID; 
+            if (name.includes('transferencia')) mapping.transferencia = f.ID;
+          });
+          setFormasCobroIds(prev => ({ ...prev, ...mapping }));
+        }
+      } catch (e) {
+        console.warn("[POS] Error fetching forms of payment:", e);
+      }
+    };
+    fetchFormas();
+  }, []);
 
   const startPulseAnimation = useCallback(() => {
     pulseScale.value = withRepeat(
@@ -612,9 +655,9 @@ export default function CobrarScreen() {
   }, [total]);
 
   // ── Confirm ────────────────────────────────────────────────────────────────
-  const handleConfirm = useCallback(() => {
+  const handleConfirm = useCallback(async () => {
     // ─ Transfer: open auth modal ─
-    if (method === "transferencia") {
+    if (method === "transferencia" && !authModalVisible) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       setAuthPassword("");
       setAuthError(false);
@@ -622,10 +665,75 @@ export default function CobrarScreen() {
       return;
     }
 
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setSuccessMethodLabel(selectedMethod.label);
-    setSuccessModalVisible(true);
-  }, [selectedMethod, method]);
+    if (!selectedCaja || !selectedCajero || !sucursalId) {
+      Alert.alert("Error de Sesión", "No hay una sesión de caja activa.");
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const databaseId = getCurrentDatabaseId();
+      
+      // Usamos los IDs obtenidos dinámicamente
+      const payload = {
+        databaseId,
+        sucursalId,
+        almacenId: selectedCaja.ALMACEN_ID,
+        clienteId: parseInt(params.clientId || "0"),
+        claveCliente: params.clientClave || "0",
+        cajaId: selectedCaja.CAJA_ID,
+        items: cartItems.map(item => ({
+          articuloId: item.articuloId,
+          clave: item.clave,
+          unidades: item.cantidad,
+          precio: item.precio
+        })),
+        pago: {
+          formaPagoId: formasCobroIds[method],
+          importe: total,
+          referencia: method === 'tarjeta' ? (cardInfo?.lastFour || '') : (method === 'transferencia' ? selectedBank.referencia : ''),
+          banco: method === 'transferencia' ? selectedBank.bank : (cardInfo?.type || ''),
+          tarjeta: cardInfo?.lastFour || '',
+          fecha: new Date().toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-')
+        }
+      };
+
+      const data = await apiRequest<any>("api/POS/finalizar-venta.php", {
+        method: "POST",
+        body: payload,
+      });
+
+      if (data.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        
+        const now = new Date();
+        setLastSaleInfo({
+          folio: data.data.folio,
+          items: cartItems,
+          total: total,
+          cliente: clientName,
+          metodoPago: selectedMethod.label,
+          fecha: now.toLocaleDateString(),
+          hora: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+
+        setSuccessMethodLabel(selectedMethod.label);
+        setSuccessModalVisible(true);
+        setTimeout(() => {
+          Alert.alert("DEBUG: Detalles Guardados", JSON.stringify(data.data.debugSeguro, null, 2));
+        }, 300);
+      } else {
+        throw new Error(data.error || "Error desconocido al procesar la venta");
+      }
+
+    } catch (err: any) {
+      console.error("[POS] Checkout error:", err);
+      Alert.alert("Error de Venta", err.message || "Ocurrió un problema al finalizar la venta.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [selectedMethod, method, selectedCaja, selectedCajero, sucursalId, cartItems, params, total, cardInfo, selectedBank, authModalVisible]);
 
   const handleAuthVerify = useCallback(() => {
     if (authPassword !== "1234") {
@@ -641,6 +749,14 @@ export default function CobrarScreen() {
 
   const handleSuccessDismiss = useCallback(() => {
     setSuccessModalVisible(false);
+    // Mostrar ticket antes de salir
+    setTimeout(() => {
+      setTicketModalVisible(true);
+    }, 400);
+  }, []);
+
+  const handleTicketClose = useCallback(() => {
+    setTicketModalVisible(false);
     // Go back and signal that the cart should be cleared
     router.replace({ pathname: "/(main)/pos/nueva-venta", params: { cleared: "1" } });
   }, []);
@@ -2557,7 +2673,7 @@ export default function CobrarScreen() {
                       { backgroundColor: "#007AFF14" },
                     ]}
                   >
-                    <Ionicons name="receipt-outline" size={20} color="#007AFF" />
+                    <Ionicons name="receipt-outline" size={16} color="#007AFF" />
                   </View>
                   <Text style={[st.mdActionLabel, { color: colors.text }]}>
                     Ticket
@@ -2589,7 +2705,7 @@ export default function CobrarScreen() {
                   >
                     <Ionicons
                       name="document-text-outline"
-                      size={20}
+                      size={16}
                       color="#5856D6"
                     />
                   </View>
@@ -2625,10 +2741,11 @@ export default function CobrarScreen() {
 
       <TicketModal
         visible={ticketModalVisible}
-        onClose={() => setTicketModalVisible(false)}
+        onClose={handleTicketClose}
         ticketData={{
-          folio: `V-${new Date().getTime().toString().slice(-6)}`,
-          fecha: new Date().toLocaleString(),
+          folio: lastSaleInfo?.folio || `V-${new Date().getTime().toString().slice(-6)}`,
+          fecha: lastSaleInfo?.fecha || new Date().toLocaleDateString(),
+          hora: lastSaleInfo?.hora || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           cliente: clientName,
           items: cartItems.map((it) => ({
             clave: it.clave,
@@ -2637,7 +2754,7 @@ export default function CobrarScreen() {
             precio: it.precio,
           })),
           total: total,
-          metodoPago: successMethodLabel || method,
+          metodoPago: lastSaleInfo?.metodoPago || (successMethodLabel || method),
           recibido: method === "efectivo" ? received : total,
           cambio: method === "efectivo" ? change : 0,
         }}
@@ -3733,25 +3850,25 @@ const st = StyleSheet.create({
   mdActionBtn: {
     flex: 1,
     alignItems: "center",
-    paddingVertical: 16,
-    borderRadius: 16,
-    gap: 6,
+    paddingVertical: 6,
+    borderRadius: 12,
+    gap: 2,
   },
   mdActionIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+    width: 28,
+    height: 28,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 2,
+    marginBottom: 0,
   },
   mdActionLabel: {
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: "700",
     letterSpacing: -0.1,
   },
   mdActionHint: {
-    fontSize: 10,
+    fontSize: 8,
     fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 0.5,

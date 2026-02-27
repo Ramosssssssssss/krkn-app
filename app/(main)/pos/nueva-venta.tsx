@@ -4,11 +4,10 @@ import TicketModal from "@/components/pos/TicketModal";
 import AppleAlertModal, { AppleAlertAction } from "@/components/pos/AppleAlertModal";
 import ManagerAuthModal from "@/components/pos/ManagerAuthModal";
 import ParkedSalesModal from "@/components/pos/ParkedSalesModal";
-import { API_URL } from "@/config/api";
 import { ParkedSale, useParkedSales } from "@/context/pos/parked-sales-context";
 import { useTheme, useThemeColors } from "@/context/theme-context";
 import { useArticleScanner } from "@/hooks/use-article-scanner";
-import { getCurrentDatabaseId } from "@/services/api";
+import { apiRequest } from "@/services/api";
 import { ArticuloDetalle } from "@/types/inventarios";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
@@ -166,18 +165,10 @@ export default function POSIndex() {
   const fetchClientes = useCallback(async (busqueda = "") => {
     setClientesLoading(true);
     try {
-      const databaseId = getCurrentDatabaseId();
-      const res = await fetch(`${API_URL}/api/POS/clientes.php`, {
+      const data = await apiRequest<any>("api/POS/clientes.php", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ databaseId, busqueda, limite: 50 }),
-      });
-      const text = await res.text();
-      if (!text) {
-        console.warn("[POS] Respuesta vacía del servidor");
-        return;
-      }
-      const data = JSON.parse(text);
+        body: { busqueda, limite: 50 },
+      }) as any;
       if (data.success && Array.isArray(data.data)) {
         const mapped: Cliente[] = data.data.map((c: any) => ({
           id: String(c.CLIENTE_ID),
@@ -387,9 +378,12 @@ export default function POSIndex() {
           count: String(count),
           qty: String(totalQty),
           client: client.nombre,
+          clientId: client.id,
+          clientClave: client.rfc, // Usando rfc como clave_cliente si no hay otro
           savings: totalSavings > 0 ? totalSavings.toFixed(2) : "0",
           items: JSON.stringify(
             detalles.map((d) => ({
+              articuloId: d.articuloId,
               clave: d.clave,
               descripcion: d.descripcion,
               cantidad: d.cantidad,

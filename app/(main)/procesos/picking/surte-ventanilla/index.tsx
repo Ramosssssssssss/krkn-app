@@ -1,30 +1,34 @@
 import { CameraScannerPicking } from "@/components/CameraScannerPicking";
+import ImageGallery from "@/components/ImageGallery";
 import { SkeletonPickingCard } from "@/components/SkeletonPickingCard";
-import { API_CONFIG, API_URL } from "@/config/api";
+import { API_URL } from "@/config/api";
 import { useThemeColors } from "@/context/theme-context";
 import { getCurrentDatabaseId } from "@/services/api";
 import { Ionicons } from "@expo/vector-icons";
+import { Audio } from "expo-av";
 import { BlurView } from "expo-blur";
 import { useCameraPermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
+import { Image } from "expo-image";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Animated,
-  BackHandler,
-  Dimensions,
-  Image,
-  Modal,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Animated,
+    BackHandler,
+    Dimensions,
+    Modal,
+    PanResponder,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+const isSmallDevice = SCREEN_HEIGHT < 750;
 
 interface ArticuloVentanilla {
   CODIGO_BARRAS: string;
@@ -38,6 +42,11 @@ interface ArticuloVentanilla {
   SURTIDAS?: number;
   CONFIRMADO?: boolean;
 }
+
+const SOUNDS = {
+  check: require("../../../../../assets/sounds/check.wav"),
+  error: require("../../../../../assets/sounds/wrong.mp3"),
+};
 
 export default function SurteVentanillaScreen() {
   const { folio, traspasoId, traspasoInId, almacen, articulos } =
@@ -53,8 +62,8 @@ export default function SurteVentanillaScreen() {
   const parsedArticulos: ArticuloVentanilla[] = articulos
     ? JSON.parse(articulos as string).map((art: any) => ({
         ...art,
-        SURTIDAS: 0,
-        CONFIRMADO: false,
+        SURTIDAS: art.SURTIDAS || 0,
+        CONFIRMADO: (art.SURTIDAS || 0) >= art.UNIDADES,
       }))
     : [];
 
@@ -71,6 +80,7 @@ export default function SurteVentanillaScreen() {
     message: "",
   });
   const [exitModalVisible, setExitModalVisible] = useState(false);
+  const [saveModalVisible, setSaveModalVisible] = useState(false);
 
   // Modal para ingresar cantidad manualmente
   const [qtyModal, setQtyModal] = useState<{
@@ -87,20 +97,113 @@ export default function SurteVentanillaScreen() {
   const [unlockedLocations, setUnlockedLocations] = useState<Set<string>>(
     new Set(),
   );
-  const [locationFeedback, setLocationFeedback] = useState<{
-    visible: boolean;
-    loc: string;
-  }>({
+  const [locationFeedback, setLocationFeedback] = useState({
     visible: false,
     loc: "",
   });
+  const [optionsModalVisible, setOptionsModalVisible] = useState(false);
 
   // Escaneo
   const [tempBarcode, setTempBarcode] = useState("");
   const scannerRef = useRef<TextInput>(null);
+  const scanTimeoutRef = useRef<any>(null);
+  const soundRef = useRef<Audio.Sound | null>(null);
+  const lastScanValue = useRef("");
   const listRef = useRef<any>(null);
+  const lastProcessedRef = useRef({ code: "", time: 0 });
   const scrollX = useRef(new Animated.Value(0)).current;
+
+  // Refs para escaneo ultra-rápido (evita cierres obsoletos/stale closures)
+  const itemsRef = useRef<ArticuloVentanilla[]>([]);
+  const currentIndexRef = useRef(0);
+
+  // Sincronizar Refs con el estado
+  const unlockedLocationsRef = useRef<Set<string>>(new Set());
+  useEffect(() => { itemsRef.current = items; }, [items]);
+  useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
+  useEffect(() => { unlockedLocationsRef.current = unlockedLocations; }, [unlockedLocations]);
   const lastInteractionIndex = useRef<number>(-1);
+
+  // Scrubber (dock-style navigation)
+  const [isScrubbing, setIsScrubbing] = useState(false);
+  const [scrubIndex, setScrubIndex] = useState(0);
+  const scrubberWidth = useRef(SCREEN_WIDTH - 40);
+  const scrubOpacity = useRef(new Animated.Value(0)).current;
+
+  const scrubberPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt) => {
+        setIsScrubbing(true);
+        Animated.spring(scrubOpacity, { toValue: 1, useNativeDriver: true, tension: 50, friction: 7 }).start();
+        const x = evt.nativeEvent.locationX;
+        const count = itemsRef.current.length;
+        if (count > 0) {
+          const idx = Math.max(0, Math.min(count - 1, Math.floor((x / scrubberWidth.current) * count)));
+          setScrubIndex(idx);
+          setCurrentIndex(idx);
+          listRef.current?.scrollToIndex({ index: idx, animated: true });
+          Haptics.selectionAsync();
+        }
+      },
+      onPanResponderMove: (evt) => {
+        const x = evt.nativeEvent.locationX;
+        const count = itemsRef.current.length;
+        if (count > 0) {
+          const idx = Math.max(0, Math.min(count - 1, Math.floor((x / scrubberWidth.current) * count)));
+          if (idx !== currentIndexRef.current) {
+            setScrubIndex(idx);
+            setCurrentIndex(idx);
+            listRef.current?.scrollToIndex({ index: idx, animated: true });
+            Haptics.selectionAsync();
+          }
+        }
+      },
+      onPanResponderRelease: () => {
+        setIsScrubbing(false);
+        Animated.timing(scrubOpacity, { toValue: 0, duration: 300, useNativeDriver: true }).start();
+      },
+    })
+  ).current;
+
+  useEffect(() => {
+    if (!isScrubbing) setScrubIndex(currentIndex);
+  }, [currentIndex, isScrubbing]);
+
+  const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
+    if (viewableItems.length > 0) {
+      const idx = viewableItems[0].index;
+      if (idx !== null) {
+        setCurrentIndex(idx);
+      }
+    }
+  }).current;
+
+  useEffect(() => {
+    Audio.setAudioModeAsync({
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: false,
+      shouldDuckAndroid: true,
+    }).catch(err => console.log("Error setting audio mode", err));
+  }, []);
+
+  const playSound = useCallback(async (type: "check" | "error") => {
+    console.log(`[VENTANILLA] Intentando reproducir sonido: ${type}`);
+    try {
+      if (soundRef.current) {
+        await soundRef.current.unloadAsync();
+      }
+      const { sound } = await Audio.Sound.createAsync(SOUNDS[type], {
+        shouldPlay: true,
+        volume: 1.0,
+      });
+      soundRef.current = sound;
+      console.log(`[VENTANILLA] Sonido ${type} reproducido correctamente`);
+    } catch (e) {
+      console.log("[VENTANILLA] Error al reproducir sonido:", e);
+    }
+  }, []);
 
   // Auto-scroll effect
   useEffect(() => {
@@ -164,8 +267,8 @@ export default function SurteVentanillaScreen() {
             NOMBRE: item.NOMBRE,
             LOCALIZACION: item.LOCALIZACION || "NA",
             UNIDAD_VENTA: item.UNIDAD_VENTA,
-            SURTIDAS: 0,
-            CONFIRMADO: false,
+            SURTIDAS: Number(item.SURTIDAS || 0),
+            CONFIRMADO: Number(item.SURTIDAS || 0) >= Number(item.UNIDADES),
           }));
           setItems(mappedItems);
         } else {
@@ -210,212 +313,11 @@ export default function SurteVentanillaScreen() {
       ) {
         scannerRef.current?.focus();
       }
-    }, 300);
+    }, 1500);
     return () => clearInterval(interval);
   }, [alert.visible, exitModalVisible, showCameraScanner, qtyModal.visible]);
 
-  const handleBarcodeScanned = (code: string) => {
-    const cleanedCode = code.trim();
-    if (!cleanedCode) return;
 
-    // 1. PRIORIDAD: ¿Es la ubicación del artículo que estoy viendo?
-    const currentArt = items[currentIndex];
-    if (currentArt && currentArt.LOCALIZACION === cleanedCode) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setUnlockedLocations((prev) => new Set(prev).add(cleanedCode));
-      setLocationFeedback({ visible: true, loc: cleanedCode });
-      setTimeout(() => setLocationFeedback({ visible: false, loc: "" }), 2000);
-      setTempBarcode("");
-      return;
-    }
-
-    // 2. PRIORIDAD: ¿Es el código de barras del artículo que estoy viendo?
-    if (
-      currentArt &&
-      (currentArt.CODIGO === cleanedCode ||
-        currentArt.CODIGO_BARRAS === cleanedCode)
-    ) {
-      const isLocked = !!(
-        currentArt.LOCALIZACION &&
-        currentArt.LOCALIZACION !== "NA" &&
-        !unlockedLocations.has(currentArt.LOCALIZACION)
-      );
-      if (isLocked) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        setAlert({
-          visible: true,
-          message: `⚠️ Primero debes desbloquear la ubicación ${currentArt.LOCALIZACION} escaneando el código del pasillo.`,
-        });
-      } else if ((currentArt.SURTIDAS ?? 0) < currentArt.UNIDADES) {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        incrementarSurtido(currentIndex);
-      }
-      setTempBarcode("");
-      return;
-    }
-
-    // 3. FALLBACK: Buscar ubicación en toda la lista
-    const matchLocIdx = items.findIndex((a) => a.LOCALIZACION === cleanedCode);
-    if (matchLocIdx !== -1) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setUnlockedLocations((prev) => new Set(prev).add(cleanedCode));
-      setLocationFeedback({ visible: true, loc: cleanedCode });
-      setTimeout(() => setLocationFeedback({ visible: false, loc: "" }), 2000);
-      listRef.current?.scrollToIndex({ index: matchLocIdx, animated: true });
-      setTempBarcode("");
-      return;
-    }
-
-    // 4. FALLBACK: Buscar artículo en toda la lista
-    const foundIndex = items.findIndex(
-      (a) =>
-        (a.CODIGO === cleanedCode || a.CODIGO_BARRAS === cleanedCode) &&
-        (a.SURTIDAS ?? 0) < a.UNIDADES,
-    );
-
-    if (foundIndex !== -1) {
-      const art = items[foundIndex];
-      const isLocked = !!(
-        art.LOCALIZACION &&
-        art.LOCALIZACION !== "NA" &&
-        !unlockedLocations.has(art.LOCALIZACION)
-      );
-
-      if (isLocked) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        setAlert({
-          visible: true,
-          message: `⚠️ Ubicación bloqueada. Desliza hacia ${art.LOCALIZACION} y escanea el pasillo.`,
-        });
-        listRef.current?.scrollToIndex({ index: foundIndex, animated: true });
-      } else {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        incrementarSurtido(foundIndex);
-        if (foundIndex !== currentIndex) {
-          listRef.current?.scrollToIndex({ index: foundIndex, animated: true });
-        }
-      }
-    } else {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    }
-    setTempBarcode("");
-  };
-
-  // Handler para escaneo con cámara
-  const handleCameraScan = useCallback(
-    (data: string) => {
-      if (cameraScanLock.current) return;
-      cameraScanLock.current = true;
-
-      const cleanedCode = data.trim().toUpperCase();
-
-      const currentArt = items[currentIndex];
-
-      // 1. ¿Es la ubicación del artículo actual?
-      if (currentArt && currentArt.LOCALIZACION === cleanedCode) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setUnlockedLocations((prev) => new Set(prev).add(cleanedCode));
-        setCameraScanMessage(`Ubicación ${cleanedCode} desbloqueada`);
-        setCameraScanSuccess(true);
-        setTimeout(() => {
-          cameraScanLock.current = false;
-          setCameraScanMessage(null);
-        }, 1500);
-        return;
-      }
-
-      // 2. ¿Es el código del artículo actual?
-      if (
-        currentArt &&
-        (currentArt.CODIGO === cleanedCode ||
-          currentArt.CODIGO_BARRAS === cleanedCode)
-      ) {
-        const isLocked = !!(
-          currentArt.LOCALIZACION &&
-          currentArt.LOCALIZACION !== "NA" &&
-          !unlockedLocations.has(currentArt.LOCALIZACION)
-        );
-
-        if (isLocked) {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-          setCameraScanMessage(
-            `Primero escanea ubicación ${currentArt.LOCALIZACION}`,
-          );
-          setCameraScanSuccess(false);
-        } else if ((currentArt.SURTIDAS ?? 0) < currentArt.UNIDADES) {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          incrementarSurtido(currentIndex);
-          setCameraScanMessage(`+1 ${currentArt.CODIGO}`);
-          setCameraScanSuccess(true);
-        }
-        setTimeout(() => {
-          cameraScanLock.current = false;
-          setCameraScanMessage(null);
-        }, 1200);
-        return;
-      }
-
-      // 3. Buscar en toda la lista
-      const matchLocIdx = items.findIndex(
-        (a) => a.LOCALIZACION === cleanedCode,
-      );
-      if (matchLocIdx !== -1) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setUnlockedLocations((prev) => new Set(prev).add(cleanedCode));
-        setCameraScanMessage(`Ubicación ${cleanedCode} desbloqueada`);
-        setCameraScanSuccess(true);
-        listRef.current?.scrollToIndex({ index: matchLocIdx, animated: true });
-        setTimeout(() => {
-          cameraScanLock.current = false;
-          setCameraScanMessage(null);
-        }, 1500);
-        return;
-      }
-
-      const foundIndex = items.findIndex(
-        (a) =>
-          (a.CODIGO === cleanedCode || a.CODIGO_BARRAS === cleanedCode) &&
-          (a.SURTIDAS ?? 0) < a.UNIDADES,
-      );
-
-      if (foundIndex !== -1) {
-        const art = items[foundIndex];
-        const isLocked = !!(
-          art.LOCALIZACION &&
-          art.LOCALIZACION !== "NA" &&
-          !unlockedLocations.has(art.LOCALIZACION)
-        );
-
-        if (isLocked) {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-          setCameraScanMessage(`Ubicación bloqueada: ${art.LOCALIZACION}`);
-          setCameraScanSuccess(false);
-          listRef.current?.scrollToIndex({ index: foundIndex, animated: true });
-        } else {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          incrementarSurtido(foundIndex);
-          setCameraScanMessage(`+1 ${art.CODIGO}`);
-          setCameraScanSuccess(true);
-          if (foundIndex !== currentIndex) {
-            listRef.current?.scrollToIndex({
-              index: foundIndex,
-              animated: true,
-            });
-          }
-        }
-      } else {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        setCameraScanMessage(`No encontrado: ${cleanedCode}`);
-        setCameraScanSuccess(false);
-      }
-
-      setTimeout(() => {
-        cameraScanLock.current = false;
-        setCameraScanMessage(null);
-      }, 1200);
-    },
-    [items, currentIndex, unlockedLocations],
-  );
 
   // Abrir cámara
   const openCameraScanner = async () => {
@@ -444,6 +346,9 @@ export default function SurteVentanillaScreen() {
       const current = art.SURTIDAS ?? 0;
       if (current < art.UNIDADES) {
         art.SURTIDAS = current + 1;
+        playSound("check");
+      } else {
+        playSound("error");
       }
       
       // Auto-confirm logic
@@ -474,6 +379,12 @@ export default function SurteVentanillaScreen() {
       const newItems = [...prev];
       const art = {...newItems[index]};
       newItems[index] = art;
+
+      if (qty > (art.SURTIDAS ?? 0) && qty <= art.UNIDADES) {
+        playSound("check");
+      } else if (qty > art.UNIDADES) {
+        playSound("error");
+      }
 
       art.SURTIDAS = Math.min(qty, art.UNIDADES);
       
@@ -507,8 +418,7 @@ export default function SurteVentanillaScreen() {
       : 0;
 
   const isOrderFinished =
-    items.length > 0 &&
-    items.every((a) => (a.SURTIDAS ?? 0) >= a.UNIDADES || a.CONFIRMADO);
+    items.length > 0 && items.every((a) => a.CONFIRMADO);
 
   const handleFinish = async () => {
     setLoading(true);
@@ -563,7 +473,285 @@ export default function SurteVentanillaScreen() {
     }
   };
 
-  const handleExit = async () => {
+  const handleBarcodeScanned = (code: string) => {
+    const cleanedCode = code.trim().toUpperCase();
+    if (!cleanedCode) return;
+    console.log("[VENTANILLA] Procesando:", cleanedCode);
+
+    // Usar Refs para obtener el estado más reciente sin esperas de React
+    const currentItems = itemsRef.current;
+    const currIdx = currentIndexRef.current;
+    const currentUnlocked = unlockedLocationsRef.current;
+    const currentArt = currentItems[currIdx];
+
+    // 1. PRIORIDAD: ¿Es la ubicación del artículo que estoy viendo?
+    const currentLoc = (currentArt?.LOCALIZACION || "").toUpperCase().trim();
+    if (currentArt && currentLoc === cleanedCode) {
+      playSound("check");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setUnlockedLocations((prev) => new Set(prev).add(currentLoc));
+      setLocationFeedback({ visible: true, loc: currentLoc });
+      setTimeout(() => setLocationFeedback({ visible: false, loc: "" }), 2000);
+      return;
+    }
+
+    // 2. PRIORIDAD: ¿Es el código del artículo que estoy viendo?
+    if (
+      currentArt &&
+      (currentArt.CODIGO === cleanedCode ||
+        currentArt.CODIGO_BARRAS === cleanedCode)
+    ) {
+      const locUpper = (currentArt.LOCALIZACION || "").toUpperCase().trim();
+      const isLocked = !!(
+        currentArt.LOCALIZACION &&
+        locUpper !== "NA" &&
+        locUpper !== "N/A" &&
+        !currentUnlocked.has(locUpper)
+      );
+
+      if (isLocked) {
+        playSound("error");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        setAlert({
+          visible: true,
+          message: `⚠️ Primero debes desbloquear la ubicación ${currentArt.LOCALIZACION} escaneando el código del pasillo.`,
+        });
+      } else if ((currentArt.SURTIDAS ?? 0) < currentArt.UNIDADES) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        incrementarSurtido(currIdx);
+      } else {
+        playSound("error");
+      }
+      return;
+    }
+
+    // 3. FALLBACK: Ubicación en lista?
+    const matchLocIdx = currentItems.findIndex(
+      (a) => (a.LOCALIZACION || "").toUpperCase().trim() === cleanedCode,
+    );
+    if (matchLocIdx !== -1) {
+      const matchedLoc = (currentItems[matchLocIdx].LOCALIZACION || "").toUpperCase().trim();
+      playSound("check");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setUnlockedLocations((prev) => new Set(prev).add(matchedLoc));
+      setLocationFeedback({ visible: true, loc: matchedLoc });
+      setTimeout(() => setLocationFeedback({ visible: false, loc: "" }), 2000);
+      listRef.current?.scrollToIndex({ index: matchLocIdx, animated: true });
+      setCurrentIndex(matchLocIdx);
+      return;
+    }
+
+    // 4. FALLBACK: Artículo en lista?
+    const foundIndex = currentItems.findIndex(
+      (a) =>
+        (a.CODIGO === cleanedCode || a.CODIGO_BARRAS === cleanedCode) &&
+        (a.SURTIDAS ?? 0) < a.UNIDADES,
+    );
+
+    if (foundIndex !== -1) {
+      const art = currentItems[foundIndex];
+      const artLocUpper = (art.LOCALIZACION || "").toUpperCase().trim();
+      const isLocked = !!(
+        art.LOCALIZACION &&
+        artLocUpper !== "NA" &&
+        artLocUpper !== "N/A" &&
+        !currentUnlocked.has(artLocUpper)
+      );
+
+      if (isLocked) {
+        playSound("error");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        setAlert({
+          visible: true,
+          message: `⚠️ Ubicación bloqueada. Desliza hacia ${art.LOCALIZACION} y escanea el pasillo.`,
+        });
+        listRef.current?.scrollToIndex({ index: foundIndex, animated: true });
+        setCurrentIndex(foundIndex);
+      } else {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        incrementarSurtido(foundIndex);
+        if (foundIndex !== currIdx) {
+          listRef.current?.scrollToIndex({ index: foundIndex, animated: true });
+          setCurrentIndex(foundIndex);
+        }
+      }
+    } else {
+      playSound("error");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+  };
+
+  const handleCameraScan = useCallback(
+    (data: string) => {
+      if (cameraScanLock.current) return;
+      cameraScanLock.current = true;
+
+      const cleanedCode = data.trim().toUpperCase();
+      const currentItems = itemsRef.current;
+      const currIdx = currentIndexRef.current;
+      const currentUnlocked = unlockedLocationsRef.current;
+      const currentArt = currentItems[currIdx];
+
+      // 1. ¿Es la ubicación del artículo actual?
+      const currentLoc = (currentArt?.LOCALIZACION || "").toUpperCase().trim();
+      if (currentArt && currentLoc === cleanedCode) {
+        playSound("check");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setUnlockedLocations((prev) => new Set(prev).add(currentLoc));
+        setCameraScanMessage(`Ubicación ${currentLoc} desbloqueada`);
+        setCameraScanSuccess(true);
+        setShowCameraScanner(false);
+        setTimeout(() => {
+          cameraScanLock.current = false;
+          setCameraScanMessage(null);
+        }, 1500);
+        return;
+      }
+
+      // 2. ¿Es el código del artículo actual?
+      if (
+        currentArt &&
+        (currentArt.CODIGO === cleanedCode ||
+          currentArt.CODIGO_BARRAS === cleanedCode)
+      ) {
+        const locUpper = (currentArt.LOCALIZACION || "").toUpperCase().trim();
+        const isLocked = !!(
+          currentArt.LOCALIZACION &&
+          locUpper !== "NA" &&
+          locUpper !== "N/A" &&
+          !currentUnlocked.has(locUpper)
+        );
+
+        if (isLocked) {
+          playSound("error");
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          setCameraScanMessage(
+            `Primero escanea ubicación ${currentArt.LOCALIZACION}`,
+          );
+          setCameraScanSuccess(false);
+        } else if ((currentArt.SURTIDAS ?? 0) < currentArt.UNIDADES) {
+          // playSound is inside incrementarSurtido
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          incrementarSurtido(currIdx);
+          setCameraScanMessage(`+1 ${currentArt.CODIGO}`);
+          setCameraScanSuccess(true);
+          setShowCameraScanner(false);
+        } else {
+          playSound("error");
+        }
+        setTimeout(() => {
+          cameraScanLock.current = false;
+          setCameraScanMessage(null);
+        }, 1200);
+        return;
+      }
+
+      // 3. Fallback: Ubicación en lista?
+      const matchLocIdx = currentItems.findIndex(
+        (a) => (a.LOCALIZACION || "").toUpperCase().trim() === cleanedCode,
+      );
+      if (matchLocIdx !== -1) {
+        const matchedLoc = (currentItems[matchLocIdx].LOCALIZACION || "").toUpperCase().trim();
+        playSound("check");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setUnlockedLocations((prev) => new Set(prev).add(matchedLoc));
+        setCameraScanMessage(`Ubicación ${matchedLoc} desbloqueada`);
+        setCameraScanSuccess(true);
+        setShowCameraScanner(false);
+        listRef.current?.scrollToIndex({ index: matchLocIdx, animated: true });
+        setCurrentIndex(matchLocIdx); // Sincronizar estado
+        setTimeout(() => {
+          cameraScanLock.current = false;
+          setCameraScanMessage(null);
+        }, 1500);
+        return;
+      }
+
+      // 4. Fallback: Artículo en lista?
+      const foundIndex = currentItems.findIndex(
+        (it) =>
+          (it.CODIGO === cleanedCode || it.CODIGO_BARRAS === cleanedCode) &&
+          (it.SURTIDAS ?? 0) < it.UNIDADES,
+      );
+
+      if (foundIndex !== -1) {
+        const art = currentItems[foundIndex];
+        const artLocUpper = (art.LOCALIZACION || "").toUpperCase().trim();
+        const isLocked = !!(
+          art.LOCALIZACION &&
+          artLocUpper !== "NA" &&
+          artLocUpper !== "N/A" &&
+          !currentUnlocked.has(artLocUpper)
+        );
+
+        if (isLocked) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          setCameraScanMessage(`Ubicación bloqueada: ${art.LOCALIZACION}`);
+          setCameraScanSuccess(false);
+          listRef.current?.scrollToIndex({ index: foundIndex, animated: true });
+          setCurrentIndex(foundIndex);
+        } else {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          incrementarSurtido(foundIndex);
+          setCameraScanMessage(`+1 ${currentItems[foundIndex].CODIGO}`);
+          setCameraScanSuccess(true);
+          setShowCameraScanner(false);
+          if (foundIndex !== currIdx) {
+            listRef.current?.scrollToIndex({ index: foundIndex, animated: true });
+            setCurrentIndex(foundIndex);
+          }
+        }
+      } else {
+        playSound("error");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        setCameraScanMessage(`No encontrado: ${cleanedCode}`);
+        setCameraScanSuccess(false);
+      }
+
+      setTimeout(() => {
+        cameraScanLock.current = false;
+        setCameraScanMessage(null);
+      }, 1200);
+    },
+    [incrementarSurtido],
+  );
+
+  const handleSaveProgress = async () => {
+    setLoading(true);
+    try {
+      const databaseId = getCurrentDatabaseId();
+      const response = await fetch(`${API_URL}/api/guardar-progreso-ventanilla.php`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          databaseId,
+          traspasoId: effectiveTraspasoId,
+          productos: items.map((item) => ({
+            ARTICULO_ID: item.ARTICULO_ID,
+            CLAVE_ARTICULO: item.CODIGO,
+            UNIDADES: item.UNIDADES,
+            SURTIDAS: item.SURTIDAS ?? 0,
+          })),
+        }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch (e) {
+      console.error("Error al guardar progreso:", e);
+    } finally {
+      setLoading(false);
+      setSaveModalVisible(false);
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace("/(main)/procesos/picking");
+      }
+    }
+  };
+
+  const handleExitWithoutSaving = async () => {
     setLoading(true);
     try {
       // Actualizar estatus a "P" (pendiente) de nuevo para liberar la ventanilla
@@ -581,7 +769,7 @@ export default function SurteVentanillaScreen() {
       console.error("Error al liberar ventanilla:", e);
     } finally {
       setLoading(false);
-      setExitModalVisible(false);
+      setSaveModalVisible(false);
       if (router.canGoBack()) {
         router.back();
       } else {
@@ -590,11 +778,12 @@ export default function SurteVentanillaScreen() {
     }
   };
 
-  const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
-    if (viewableItems.length > 0) {
-      setCurrentIndex(viewableItems[0].index);
-    }
-  }).current;
+  const handleExit = async () => {
+    setExitModalVisible(false);
+    setTimeout(() => {
+        setSaveModalVisible(true);
+    }, 300);
+  };
 
   const currentItem = items[currentIndex];
 
@@ -612,16 +801,36 @@ export default function SurteVentanillaScreen() {
       {/* Scanner oculto */}
       <TextInput
         ref={scannerRef}
-        style={styles.hiddenInput}
+        style={{ position: "absolute", height: 1, width: 1, opacity: 0 }}
         autoFocus
         showSoftInputOnFocus={false}
         blurOnSubmit={false}
-        value={tempBarcode}
-        onChangeText={setTempBarcode}
-        onSubmitEditing={() => {
-          const code = tempBarcode.trim();
-          setTempBarcode("");
-          if (code) handleBarcodeScanned(code);
+        autoCorrect={false}
+        autoCapitalize="none"
+        spellCheck={false}
+        onChangeText={(text) => {
+          if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
+
+          if (text.includes("\n") || text.includes("\r")) {
+            scannerRef.current?.setNativeProps({ text: "" });
+            scannerRef.current?.clear();
+
+            const parts = text.split(/[\r\n]+/).filter(p => p.trim() !== "");
+            parts.forEach(code => handleBarcodeScanned(code.trim()));
+
+            setTempBarcode("");
+            return;
+          }
+
+          setTempBarcode(text);
+          scanTimeoutRef.current = setTimeout(() => {
+            if (text.trim().length > 0) {
+              scannerRef.current?.setNativeProps({ text: "" });
+              scannerRef.current?.clear();
+              handleBarcodeScanned(text.trim());
+              setTempBarcode("");
+            }
+          }, 100);
         }}
         onBlur={() => {
           if (
@@ -644,13 +853,7 @@ export default function SurteVentanillaScreen() {
       >
         <View style={styles.headerTop}>
           <TouchableOpacity
-            onPress={() => {
-              if (router.canGoBack()) {
-                router.back();
-              } else {
-                router.replace("/(main)/procesos/picking");
-              }
-            }}
+            onPress={() => setExitModalVisible(true)}
             style={[styles.headerBtn, { backgroundColor: colors.background }]}
           >
             <Ionicons name="arrow-back" size={22} color={colors.text} />
@@ -673,36 +876,13 @@ export default function SurteVentanillaScreen() {
             </View>
           </View>
 
-          <View style={{ flexDirection: "row", gap: 8 }}>
-            {/* Botón de cámara */}
-            <TouchableOpacity
-              style={[styles.headerBtn, { backgroundColor: "#3B82F6" }]}
-              onPress={openCameraScanner}
-            >
-              <Ionicons name="camera" size={22} color="#fff" />
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            onPress={() => setOptionsModalVisible(true)}
+            style={styles.headerBtn}
+          >
+            <Ionicons name="ellipsis-vertical" size={24} color={colors.accent} />
+          </TouchableOpacity>
         </View>
-
-        {/* Barra de progreso */}
-        <View
-          style={[styles.progressTrack, { backgroundColor: colors.border }]}
-        >
-          <View
-            style={[
-              styles.progressFill,
-              {
-                width: `${progressPercent}%`,
-                backgroundColor:
-                  progressPercent >= 100 ? "#10B981" : colors.accent,
-              },
-            ]}
-          />
-        </View>
-        <Text style={[styles.progressText, { color: colors.textSecondary }]}>
-          {totalSurtidas} / {totalUnidades} unidades (
-          {Math.round(progressPercent)}%)
-        </Text>
       </View>
 
       {/* Carrusel de Artículos con Skeleton Loading */}
@@ -716,18 +896,29 @@ export default function SurteVentanillaScreen() {
           data={items}
           horizontal
           pagingEnabled
+          keyboardShouldPersistTaps="handled"
           showsHorizontalScrollIndicator={false}
-          onScroll={() => {}}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+            { useNativeDriver: true }
+          )}
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
           keyExtractor={(item, idx) => `${item.ARTICULO_ID}-${idx}`}
+          getItemLayout={(_, index) => ({
+            length: SCREEN_WIDTH,
+            offset: SCREEN_WIDTH * index,
+            index,
+          })}
           renderItem={({ item, index }) => {
           const isConfirmed = item.CONFIRMADO;
           const surtidas = item.SURTIDAS ?? 0;
+          const locUpper = (item.LOCALIZACION || "").toUpperCase().trim();
           const isLocked = !!(
             item.LOCALIZACION &&
-            item.LOCALIZACION !== "NA" &&
-            !unlockedLocations.has(item.LOCALIZACION)
+            locUpper !== "NA" &&
+            locUpper !== "N/A" &&
+            !unlockedLocations.has(locUpper)
           );
 
           return (
@@ -740,36 +931,17 @@ export default function SurteVentanillaScreen() {
                     { backgroundColor: colors.background },
                   ]}
                 >
-                  {!imgErrors[item.ARTICULO_ID] ? (
-                    <Image
-                      source={{
-                        uri: `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.IMAGEN_ARTICULO}?databaseId=${getCurrentDatabaseId()}&articuloId=${item.ARTICULO_ID}`,
-                      }}
-                      style={styles.productImage}
-                      resizeMode="contain"
-                      onError={() =>
-                        setImgErrors((prev) => ({
-                          ...prev,
-                          [item.ARTICULO_ID]: true,
-                        }))
-                      }
-                    />
-                  ) : (
-                    <View
-                      style={[
-                        styles.productImage,
-                        { justifyContent: "center", alignItems: "center" },
-                      ]}
-                    >
-                      <Ionicons
-                        name="cube-outline"
-                        size={80}
-                        color={colors.textTertiary || "#9CA3AF"}
-                      />
-                    </View>
-                  )}
+                  <ImageGallery
+                    databaseId={getCurrentDatabaseId() || 1}
+                    articuloId={Number(item.ARTICULO_ID || 0)}
+                    clave={item.CODIGO || ""}
+                    nombre={item.NOMBRE || ""}
+                    unidadVenta={item.UNIDAD_VENTA || "PZA"}
+                    height="100%"
+                  />
                   {/* Badge de ubicación flotante */}
                   <View
+                    pointerEvents="none"
                     style={[
                       styles.floatingLocationBadge,
                       {
@@ -1046,12 +1218,93 @@ export default function SurteVentanillaScreen() {
         </Animated.View>
       )}
 
-      {/* Footer */}
-      <View style={[styles.footer, { paddingBottom: 30 }]}>
-        {isOrderFinished ? (
+      {/* Footer / Scrubber */}
+      <View style={[styles.footerAction, { paddingBottom: 5 }]}>
+        {!isOrderFinished && items.length > 1 && (
+          <>
+            <Animated.View
+              pointerEvents="none"
+              style={[styles.scrubLabel, { opacity: scrubOpacity }]}
+            >
+              <View style={styles.scrubPreviewCard}>
+                <BlurView intensity={90} tint="dark" style={StyleSheet.absoluteFill} />
+                <View style={styles.scrubPreviewImageWrapper}>
+                  <Image
+                    source={{
+                      uri: `${API_URL}/api/imagen-articulo.php?databaseId=${getCurrentDatabaseId() || 1}&articuloId=${items[scrubIndex]?.ARTICULO_ID}&pos=0`,
+                    }}
+                    style={styles.scrubPreviewImage}
+                    contentFit="cover"
+                  />
+                  <View style={styles.imageOverlay} />
+                </View>
+                <View style={styles.scrubPreviewInfo}>
+                  <Text style={styles.scrubPreviewClave} numberOfLines={1}>
+                    {items[scrubIndex]?.CODIGO || ''}
+                  </Text>
+                  <Text style={styles.scrubPreviewName} numberOfLines={2}>
+                    {items[scrubIndex]?.NOMBRE || ''}
+                  </Text>
+                  <View style={styles.scrubPreviewFooter}>
+                    <Text style={styles.scrubPreviewCounter}>
+                      {scrubIndex + 1} / {items.length}
+                    </Text>
+                    <View style={styles.scrubStats}>
+                      <Ionicons name="cart" size={10} color="rgba(255,255,255,0.6)" />
+                      <Text style={styles.scrubStatsText}>
+                        {items[scrubIndex]?.SURTIDAS || 0} / {items[scrubIndex]?.UNIDADES || 0}
+                      </Text>
+                    </View>
+                    {items[scrubIndex]?.CONFIRMADO && (
+                      <Ionicons name="checkmark-circle" size={12} color="#10B981" />
+                    )}
+                  </View>
+
+                  {/* Mini progress bar */}
+                  <View style={styles.scrubMiniTrack}>
+                    <View
+                      style={[
+                        styles.scrubMiniFill,
+                        {
+                          width: `${Math.min(100, ((items[scrubIndex]?.SURTIDAS || 0) / (items[scrubIndex]?.UNIDADES || 1)) * 100)}%`,
+                          backgroundColor: items[scrubIndex]?.CONFIRMADO ? "#10B981" : colors.accent,
+                        },
+                      ]}
+                    />
+                  </View>
+                </View>
+              </View>
+            </Animated.View>
+
+            <View
+              style={styles.scrubberBar}
+              onLayout={(e) => (scrubberWidth.current = e.nativeEvent.layout.width)}
+              {...scrubberPanResponder.panHandlers}
+            >
+              {items.map((it, i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.scrubDot,
+                    {
+                      backgroundColor: it.CONFIRMADO
+                        ? "#10B981"
+                        : i === (isScrubbing ? scrubIndex : currentIndex)
+                          ? colors.accent
+                          : colors.border,
+                      transform: [{ scale: i === (isScrubbing ? scrubIndex : currentIndex) ? 1.6 : 1 }],
+                    },
+                  ]}
+                />
+              ))}
+            </View>
+          </>
+        )}
+
+        {isOrderFinished && (
           <TouchableOpacity
             onPress={handleFinish}
-            style={[styles.finishBtn, { backgroundColor: "#10B981" }]}
+            style={[styles.finishBtn, { backgroundColor: "#10B981", marginBottom: 30 }]}
             disabled={loading}
           >
             {loading ? (
@@ -1063,27 +1316,6 @@ export default function SurteVentanillaScreen() {
               </>
             )}
           </TouchableOpacity>
-        ) : (
-          <View style={[styles.deckInfo, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.deckCount, { color: colors.textSecondary }]}>
-              Artículo {currentIndex + 1} de {items.length}
-            </Text>
-            <View style={styles.deckDots}>
-              {items.map((_, i) => (
-                <View
-                  key={i}
-                  style={[
-                    styles.dot,
-                    {
-                      backgroundColor:
-                        i === currentIndex ? colors.accent : colors.border,
-                    },
-                    i === currentIndex && styles.dotActive,
-                  ]}
-                />
-              ))}
-            </View>
-          </View>
         )}
       </View>
 
@@ -1099,13 +1331,13 @@ export default function SurteVentanillaScreen() {
             style={[styles.modalContent, { backgroundColor: colors.surface }]}
           >
             <Ionicons name="warning-outline" size={48} color="#F59E0B" />
-            <Text style={[styles.modalTitle, { color: colors.text }]}>
-              ¿Seguro que quieres salir?
+            <Text style={[styles.modalTitle, { color: colors.text, textAlign: 'center' }]}>
+              ¿Estás seguro que deseas salir?
             </Text>
             <Text
               style={[styles.modalMessage, { color: colors.textSecondary }]}
             >
-              Se perderá el progreso de esta ventanilla.
+              El jefe de picking tiene que liberarte para seguir trabajando.
             </Text>
             <View style={styles.modalButtons}>
               <TouchableOpacity
@@ -1117,14 +1349,53 @@ export default function SurteVentanillaScreen() {
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                onPress={() => {
-                   setExitModalVisible(false);
-                   if (router.canGoBack()) { router.back(); } else { router.replace("/(main)/procesos/picking"); }
-                }}
+                onPress={handleExit}
                 style={[styles.modalBtn, { backgroundColor: "#EF4444" }]}
               >
                 <Text style={[styles.modalBtnText, { color: "#fff" }]}>
                   Salir
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal Guardar Progreso */}
+      <Modal visible={saveModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <BlurView
+            intensity={20}
+            style={StyleSheet.absoluteFill}
+            tint="dark"
+          />
+          <View
+            style={[styles.modalContent, { backgroundColor: colors.surface }]}
+          >
+            <Ionicons name="save-outline" size={48} color={colors.accent} />
+            <Text style={[styles.modalTitle, { color: colors.text, textAlign: 'center' }]}>
+              ¿Deseas guardar el progreso de tu orden?
+            </Text>
+            <Text
+              style={[styles.modalMessage, { color: colors.textSecondary, textAlign: 'center' }]}
+            >
+              Podrás retomar este pedido más tarde desde la lista de pendientes.
+            </Text>
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                onPress={handleExitWithoutSaving}
+                style={[styles.modalBtn, { backgroundColor: colors.border }]}
+              >
+                <Text style={[styles.modalBtnText, { color: colors.text }]}>
+                  No guardar
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleSaveProgress}
+                style={[styles.modalBtn, { backgroundColor: colors.accent }]}
+              >
+                <Text style={[styles.modalBtnText, { color: "#fff" }]}>
+                  Guardar
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1268,7 +1539,7 @@ export default function SurteVentanillaScreen() {
           </View>
         )}
       </Modal>
-
+      
       {/* 📷 Camera Scanner Modal */}
       <CameraScannerPicking
         visible={showCameraScanner}
@@ -1279,6 +1550,40 @@ export default function SurteVentanillaScreen() {
         lastScanMessage={cameraScanMessage}
         lastScanSuccess={cameraScanSuccess}
       />
+
+      {/* MODAL DE OPCIONES */}
+      <Modal visible={optionsModalVisible} transparent animationType="slide">
+        <View style={styles.modalOverlayFull}>
+           <TouchableOpacity 
+             style={StyleSheet.absoluteFill} 
+             onPress={() => setOptionsModalVisible(false)} 
+           />
+           <View style={[styles.ventanillaModal, { backgroundColor: colors.surface }]}>
+              <Text style={[styles.ventanillaModalTitle, { color: colors.text, marginBottom: 20 }]}>Opciones</Text>
+              
+              <TouchableOpacity 
+                style={[styles.ventanillaItem, { backgroundColor: "#3B82F610" }]}
+                onPress={() => {
+                  setOptionsModalVisible(false);
+                  openCameraScanner();
+                }}
+              >
+                <Ionicons name="camera-outline" size={24} color="#3B82F6" />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.ventanillaItemName, { color: colors.text }]}>Escanear con Cámara</Text>
+                  <Text style={[styles.ventanillaItemCode, { color: colors.textSecondary }]}>Usar ráfaga de cámara</Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.ventanillaModalBtnSecondary, { marginTop: 10, borderColor: colors.border }]}
+                onPress={() => setOptionsModalVisible(false)}
+              >
+                <Text style={[styles.ventanillaModalBtnSecondaryText, { color: colors.text }]}>Cerrar</Text>
+              </TouchableOpacity>
+           </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1337,7 +1642,7 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   imageContainer: {
-    height: 180,
+    height: isSmallDevice ? 150 : 250, 
     justifyContent: "center",
     alignItems: "center",
     position: "relative",
@@ -1363,7 +1668,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   cardContent: {
-    padding: 16,
+    padding: isSmallDevice ? 8 : 12, 
   },
   productCode: {
     fontSize: 11,
@@ -1372,18 +1677,18 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   productName: {
-    fontSize: 16,
+    fontSize: isSmallDevice ? 12 : 14, 
     fontWeight: "700",
-    marginBottom: 12,
-    lineHeight: 20,
+    marginBottom: isSmallDevice ? 4 : 8, 
+    lineHeight: isSmallDevice ? 15 : 18,
   },
   statsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     backgroundColor: "rgba(0,0,0,0.03)",
-    padding: 12,
-    borderRadius: 16,
-    marginBottom: 12,
+    padding: isSmallDevice ? 6 : 8, 
+    borderRadius: 14,
+    marginBottom: isSmallDevice ? 6 : 10,
   },
   statItem: {
     alignItems: "center",
@@ -1399,7 +1704,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   statValue: {
-    fontSize: 16,
+    fontSize: isSmallDevice ? 13 : 16,
     fontWeight: "900",
   },
   surtidoIndicator: {
@@ -1478,16 +1783,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   qtyBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: isSmallDevice ? 42 : 52,
+    height: isSmallDevice ? 42 : 52,
+    borderRadius: isSmallDevice ? 21 : 26,
     justifyContent: "center",
     alignItems: "center",
   },
   confirmCircle: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+    width: isSmallDevice ? 50 : 70,
+    height: isSmallDevice ? 50 : 70,
+    borderRadius: isSmallDevice ? 25 : 35,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -1578,18 +1883,127 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   footer: { paddingHorizontal: 20 },
-  footerAction: {
-    paddingHorizontal: 20,
-    position: "absolute",
-    bottom: 20,
-    width: "100%",
-    elevation: 10,
-    zIndex: 10,
-  },
   cardContainer: {
     flex: 1,
     padding: 15,
     justifyContent: "center",
+  },
+
+  // Scrubber Dock styles
+  footerAction: {
+    paddingHorizontal: 20,
+    position: "absolute",
+    bottom: 25,
+    width: "100%",
+    elevation: 10,
+    zIndex: 10,
+  },
+  scrubLabel: {
+    position: "absolute",
+    bottom: 60,
+    alignSelf: "center",
+    width: SCREEN_WIDTH * 0.85,
+  },
+  scrubPreviewCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 20,
+    overflow: "hidden",
+    padding: 10,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 25,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
+  },
+  scrubPreviewImageWrapper: {
+    width: 80,
+    height: 80,
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: "rgba(255,255,255,0.05)",
+  },
+  scrubPreviewImage: {
+    width: "100%",
+    height: "100%",
+  },
+  imageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.1)",
+  },
+  scrubPreviewInfo: {
+    flex: 1,
+    marginLeft: 15,
+    justifyContent: "center",
+  },
+  scrubPreviewClave: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
+  scrubPreviewName: {
+    color: "rgba(255,255,255,0.8)",
+    fontSize: 12,
+    fontWeight: "500",
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  scrubPreviewFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 6,
+    gap: 6,
+  },
+  scrubPreviewCounter: {
+    color: "rgba(255,255,255,0.4)",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  scrubStats: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.1)",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    gap: 4,
+    marginLeft: "auto",
+  },
+  scrubStatsText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  scrubMiniTrack: {
+    height: 3,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderRadius: 2,
+    marginTop: 8,
+    overflow: "hidden",
+  },
+  scrubMiniFill: {
+    height: "100%",
+    borderRadius: 2,
+  },
+  scrubberBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-evenly",
+    backgroundColor: "rgba(0,0,0,0.15)",
+    borderRadius: 24,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+  },
+  scrubDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   
   finishBtn: {
@@ -1717,5 +2131,49 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 2,
     marginBottom: 16,
+  },
+  ventanillaModal: {
+    width: "90%",
+    maxHeight: "80%",
+    borderRadius: 24,
+    padding: 24,
+  },
+  ventanillaModalTitle: {
+    fontSize: 20,
+    fontWeight: "900",
+    letterSpacing: -0.5,
+  },
+  ventanillaItem: {
+    flexDirection: "row",
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 10,
+    alignItems: "center",
+    gap: 12,
+  },
+  ventanillaItemName: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  ventanillaItemCode: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  ventanillaModalBtnSecondary: {
+    height: 56,
+    borderRadius: 18,
+    borderWidth: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  ventanillaModalBtnSecondaryText: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  modalOverlayFull: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.4)",
   },
 });

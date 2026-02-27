@@ -19,6 +19,7 @@ import {
 
 const getInventariosConfig = (
   companyCode: string,
+  userId: number | undefined,
   t: (key: string) => string,
   onRecepcionPress: () => void,
   onEntradasPress: () => void,
@@ -28,6 +29,8 @@ const getInventariosConfig = (
   onAplicarPress: () => void,
   onSolicitudesPress: () => void,
   onAsignadosPress: () => void,
+  onLayoutPress: () => void,
+  onAprobacionesPress?: () => void,
 ): ModuleScreenConfig => {
   const groups: ModuleGroup[] = [
     // ============================================
@@ -102,6 +105,14 @@ const getInventariosConfig = (
       color: "#3B82F6",
       onPress: onAsignadosPress,
     },
+    {
+      id: "layout",
+      title: "Layout",
+      subtitle: "Estructura del almacén",
+      icon: "map-outline",
+      color: "#6366F1",
+      onPress: onLayoutPress,
+    },
     // ============================================
     // EMPRESA (Solo Recepción)
     // ============================================
@@ -129,6 +140,17 @@ const getInventariosConfig = (
     // ============================================
   ];
 
+  if (userId === 4) {
+    groups.push({
+      id: "aprobaciones",
+      title: "Aprobaciones",
+      subtitle: "Autorizar inventarios",
+      icon: "shield-checkmark-outline",
+      color: "#7C3AED",
+      onPress: onAprobacionesPress || (() => {}),
+    });
+  }
+
   return {
     headerIcon: "layers-outline",
     headerTitle: t("inventory.title"),
@@ -152,7 +174,7 @@ const getInventariosConfig = (
 };
 
 export default function InventariosIndexScreen() {
-  const { companyCode } = useAuth();
+  const { companyCode, user } = useAuth();
   const { t } = useLanguage();
   const colors = useThemeColors();
   const [showRecepcionModal, setShowRecepcionModal] = useState(false);
@@ -174,6 +196,7 @@ export default function InventariosIndexScreen() {
 
   const config = getInventariosConfig(
     companyCode || "EMPRESA",
+    user?.USUARIO_ID,
     t,
     () => setShowRecepcionModal(true),
     () => setShowEntradasModal(true),
@@ -183,6 +206,8 @@ export default function InventariosIndexScreen() {
     () => setShowAplicarModal(true),
     () => setShowSolicitudesModal(true),
     () => router.push("/(main)/inventarios/asignados" as any),
+    () => router.push("/(main)/inventarios/layout" as any),
+    () => router.push("/(main)/inventarios/aplicar/aprobaciones" as any),
   );
 
   interface ModalOption {

@@ -66,7 +66,8 @@ export async function apiRequest<T>(
   }
 
   try {
-    const response = await fetch(`${API_BASE_URL}${finalEndpoint}`, config);
+    const urlPath = finalEndpoint.startsWith("/") ? finalEndpoint : `/${finalEndpoint}`;
+    const response = await fetch(`${API_BASE_URL}${urlPath}`, config);
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);

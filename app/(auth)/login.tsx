@@ -10,16 +10,16 @@ import { StatusBar } from "expo-status-bar";
 import { useVideoPlayer, VideoView } from "expo-video";
 import React, { useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    KeyboardAvoidingView,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Animated,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 const FACE_ID_ENABLED_KEY = "@krkn_face_id_enabled";
@@ -493,7 +493,7 @@ export default function LoginScreen() {
 
         {/* Footer */}
         <Text style={[styles.footer, { color: "rgba(255,255,255,0.4)" }]}>
-          KRKN · v1.0
+          KRKN · v1.1.2
         </Text>
       </KeyboardAvoidingView>
     </View>

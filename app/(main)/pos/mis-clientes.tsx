@@ -1,6 +1,5 @@
-import { API_URL } from "@/config/api";
 import { useTheme, useThemeColors } from "@/context/theme-context";
-import { getCurrentDatabaseId } from "@/services/api";
+import { apiRequest } from "@/services/api";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
@@ -129,18 +128,14 @@ export default function MisClientesScreen() {
   const fetchClientes = useCallback(
     async (busqueda: string, page: number, append = false) => {
       try {
-        const databaseId = getCurrentDatabaseId();
-        const res = await fetch(`${API_URL}/api/POS/clientes.php`, {
+        const json = await apiRequest<any>("api/POS/clientes.php", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            databaseId,
+          body: {
             busqueda: busqueda.trim(),
             limite: POR_PAGINA,
             pagina: page,
-          }),
-        });
-        const json = await res.json();
+          },
+        }) as any;
         if (json.success) {
           const data: Cliente[] = json.data || [];
           setClientes((prev) => (append ? [...prev, ...data] : data));

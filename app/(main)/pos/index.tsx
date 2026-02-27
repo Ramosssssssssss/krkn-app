@@ -1,6 +1,6 @@
-import { API_URL } from "@/config/api";
+import { usePOS } from "@/context/pos/pos-context";
 import { useTheme, useThemeColors } from "@/context/theme-context";
-import { getCurrentDatabaseId } from "@/services/api";
+import { apiRequest } from "@/services/api";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
@@ -168,27 +168,29 @@ export default function POSMenuScreen() {
   const touchingRef = useRef(false);
 
   // ── Sesión de caja ────────────────────────────────────────────────────
+  const { 
+    selectedCaja, 
+    selectedCajero, 
+    sessionActive, 
+    setSession, 
+    endSession 
+  } = usePOS();
+
   const [sessionModal, setSessionModal] = useState(false);
   const [sessionStep, setSessionStep] = useState<"caja" | "cajero">("caja");
   const [cajas, setCajas] = useState<CajaItem[]>([]);
   const [cajeros, setCajeros] = useState<CajeroItem[]>([]);
   const [loadingCajas, setLoadingCajas] = useState(false);
   const [loadingCajeros, setLoadingCajeros] = useState(false);
-  const [selectedCaja, setSelectedCaja] = useState<CajaItem | null>(null);
-  const [selectedCajero, setSelectedCajero] = useState<CajeroItem | null>(null);
-  const [sessionActive, setSessionActive] = useState(false);
 
   const fetchCajas = useCallback(async () => {
     setLoadingCajas(true);
     try {
-      const databaseId = getCurrentDatabaseId();
-      const res = await fetch(`${API_URL}/api/POS/sesion-caja.php`, {
+      const resp = await apiRequest<CajaItem[]>("api/POS/sesion-caja.php", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ databaseId, action: "cajas" }),
+        body: { action: "cajas" },
       });
-      const json = await res.json();
-      if (json.success) setCajas(json.data || []);
+      if (resp.success) setCajas(resp.data || []);
     } catch {
       /* silencioso */
     } finally {
@@ -200,14 +202,11 @@ export default function POSMenuScreen() {
     setLoadingCajeros(true);
     setCajeros([]);
     try {
-      const databaseId = getCurrentDatabaseId();
-      const res = await fetch(`${API_URL}/api/POS/sesion-caja.php`, {
+      const resp = await apiRequest<CajeroItem[]>("api/POS/sesion-caja.php", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ databaseId, action: "cajeros", cajaId }),
+        body: { action: "cajeros", cajaId },
       });
-      const json = await res.json();
-      if (json.success) setCajeros(json.data || []);
+      if (resp.success) setCajeros(resp.data || []);
     } catch {
       /* silencioso */
     } finally {
@@ -225,20 +224,21 @@ export default function POSMenuScreen() {
     (caja: CajaItem) => {
       if (Platform.OS !== "web")
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      setSelectedCaja(caja);
+      setSession(caja, null as any); // Temporalmente solo guardamos la caja
       setSessionStep("cajero");
       fetchCajeros(caja.CAJA_ID);
     },
-    [fetchCajeros],
+    [fetchCajeros, setSession],
   );
 
   const handleSelectCajero = useCallback((cajero: CajeroItem) => {
     if (Platform.OS !== "web")
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setSelectedCajero(cajero);
-    setSessionActive(true);
+    if (selectedCaja) {
+      setSession(selectedCaja, cajero);
+    }
     setSessionModal(false);
-  }, []);
+  }, [selectedCaja, setSession]);
 
   const handleActionPress = useCallback(
     (action: MenuAction) => {
@@ -255,10 +255,8 @@ export default function POSMenuScreen() {
   const handleEndSession = useCallback(() => {
     if (Platform.OS !== "web")
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setSessionActive(false);
-    setSelectedCaja(null);
-    setSelectedCajero(null);
-  }, []);
+    endSession();
+  }, [endSession]);
 
   // Scroll al set del medio al montar
   useEffect(() => {
@@ -738,7 +736,7 @@ export default function POSMenuScreen() {
                   onPress={() => {
                     setSessionStep("caja");
                     setCajeros([]);
-                    setSelectedCaja(null);
+                    setSession(null as any, null as any);
                   }}
                   style={[
                     st.modalBackBtn,

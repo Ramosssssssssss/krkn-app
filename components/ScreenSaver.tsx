@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useRef, useState } from "react";
 import {
     Image,
+    Modal,
     Platform,
     StyleSheet,
     Text,
@@ -268,14 +269,16 @@ export function ScreenSaver({ visible, onDismiss }: ScreenSaverProps) {
     transform: [{ translateY: floatY.value }],
   }));
 
-  if (!visible) return null;
+  // No vamos a regresar null directamente para permitir la animación de salida si se requiere (aunque está controlado por Modal),
+  // pero usaremos visible en Modal.
 
   const slide = shuffled[currentIndex] || SLIDES[0];
   const catConfig = CATEGORY_CONFIG[slide.category];
 
   return (
-    <TouchableWithoutFeedback onPress={onDismiss}>
-      <Animated.View style={[styles.container, overlayStyle]}>
+    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent>
+      <TouchableWithoutFeedback onPress={onDismiss}>
+        <Animated.View style={[styles.container, overlayStyle]}>
         {/* Background */}
         <View style={styles.background} />
 
@@ -383,7 +386,8 @@ export function ScreenSaver({ visible, onDismiss }: ScreenSaverProps) {
           </View>
         </View>
       </Animated.View>
-    </TouchableWithoutFeedback>
+      </TouchableWithoutFeedback>
+    </Modal>
   );
 }
 

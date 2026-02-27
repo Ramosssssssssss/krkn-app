@@ -53,6 +53,11 @@ export const API_CONFIG = {
     CREAR_ARTICULO_COMEX: "/api/crear-articulo-comex.php",
     CATALOGOS_COMEX: "/api/get-catalogos-comex.php",
     TABLEROS_ORDENES_COMPRA: "/api/tableros-ordenes-compra.php",
+    SOLICITAR_APROBACION_INVFIS: "/api/solicitar-aprobacion-inv.php",
+    RESPONDER_APROBACION_INVFIS: "/api/responder-aprobacion-inv.php",
+    GET_QUIEBRES_UBICACION: "/api/get-quiebres-ubicacion.php",
+    GET_INVENTARIO_UBICACION: "/api/get-inventario-ubicacion.php",
+    GET_CLASES_UBICACION: "/api/get-clases-ubicacion.php",
   },
 };
 

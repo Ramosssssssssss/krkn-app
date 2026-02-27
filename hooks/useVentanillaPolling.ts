@@ -31,6 +31,7 @@ export function useVentanillaPolling(
   >();
   const [isPolling, setIsPolling] = useState(false);
   const [lastSeenId, setLastSeenId] = useState(0);
+  const lastSeenIdRef = useRef(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const processedIds = useRef<Set<number>>(new Set());
 
@@ -42,6 +43,7 @@ export function useVentanillaPolling(
         if (stored) {
           const id = parseInt(stored, 10);
           setLastSeenId(id);
+          lastSeenIdRef.current = id;
           console.log("[VENTANILLA] LastSeenId cargado:", id);
         }
       } catch (e) {
@@ -51,33 +53,20 @@ export function useVentanillaPolling(
     loadLastSeenId();
   }, []);
 
-  // Guardar último ID visto
-  const saveLastSeenId = useCallback(
-    async (id: number) => {
-      if (id > lastSeenId) {
-        setLastSeenId(id);
-        try {
-          await AsyncStorage.setItem(STORAGE_LAST_SEEN, String(id));
-        } catch (e) {
-          console.warn("[VENTANILLA] Error guardando lastSeenId:", e);
-        }
-      }
-    },
-    [lastSeenId],
-  );
-
-  // Función de polling
+  // Función de polling (sin dependencias de estado para evitar re-creación)
   const poll = useCallback(async () => {
     try {
       const databaseId = getCurrentDatabaseId();
       if (!databaseId) return;
+
+      const currentLastId = lastSeenIdRef.current;
 
       const response = await fetch(`${API_URL}/api/ventanilla-eventos.php`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           databaseId,
-          afterId: lastSeenId,
+          afterId: currentLastId,
           limit: 5,
         }),
       });
@@ -85,72 +74,45 @@ export function useVentanillaPolling(
       const data = await response.json();
 
       if (data.success && data.eventos && data.eventos.length > 0) {
-        // Filtrar eventos ya procesados (por EVENTO_ID)
         const nuevos = data.eventos.filter(
           (ev: VentanillaEvento) => !processedIds.current.has(ev.EVENTO_ID),
         );
 
         if (nuevos.length > 0) {
-          // Tomar el primero que no hayamos procesado
           const evento = nuevos[0];
-          console.log(
-            "[VENTANILLA] ¡Nuevo traspaso detectado!",
-            evento.FOLIO,
-            "EVENTO_ID:",
-            evento.EVENTO_ID,
-          );
-
-          // Marcar como procesado por EVENTO_ID
+          console.log("[VENTANILLA] ¡Nuevo traspaso!", evento.FOLIO);
           processedIds.current.add(evento.EVENTO_ID);
-
-          // Notificar
           setNuevoTraspaso(evento);
-          if (onNewVentanilla) {
-            onNewVentanilla(evento);
-          }
+          if (onNewVentanilla) onNewVentanilla(evento);
 
-          // Actualizar lastSeenId con el EVENTO_ID
-          saveLastSeenId(evento.EVENTO_ID);
+          // Actualizar Ref y Storage (sin disparar re-render de poll)
+          lastSeenIdRef.current = Math.max(lastSeenIdRef.current, evento.EVENTO_ID);
+          AsyncStorage.setItem(STORAGE_LAST_SEEN, String(lastSeenIdRef.current));
         }
 
-        // Actualizar el lastId general
-        if (data.lastId > lastSeenId) {
-          saveLastSeenId(data.lastId);
+        if (data.lastId > lastSeenIdRef.current) {
+          lastSeenIdRef.current = data.lastId;
+          AsyncStorage.setItem(STORAGE_LAST_SEEN, String(data.lastId));
         }
       }
     } catch (error) {
       console.error("[VENTANILLA] Error en polling:", error);
     }
-  }, [lastSeenId, onNewVentanilla, saveLastSeenId]);
+  }, [onNewVentanilla]);
 
-  // Iniciar/detener polling
+  // Iniciar/detener polling (solo si cambia enabled)
   useEffect(() => {
     if (enabled) {
-      console.log(
-        "[VENTANILLA] Iniciando polling cada",
-        POLLING_INTERVAL / 1000,
-        "segundos",
-      );
       setIsPolling(true);
-
       // Primera consulta inmediata
       poll();
-
       // Polling periódico
       intervalRef.current = setInterval(poll, POLLING_INTERVAL);
-
       return () => {
-        if (intervalRef.current) {
-          clearInterval(intervalRef.current);
-          intervalRef.current = null;
-        }
+        if (intervalRef.current) clearInterval(intervalRef.current);
         setIsPolling(false);
       };
     } else {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
       setIsPolling(false);
     }
   }, [enabled, poll]);

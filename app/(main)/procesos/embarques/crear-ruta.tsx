@@ -6,12 +6,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, Stack } from "expo-router";
+import LottieView from "lottie-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
     Animated,
     FlatList,
+    Modal,
     Platform,
     RefreshControl,
     StyleSheet,
@@ -163,6 +165,8 @@ export default function CrearRutaScreen() {
   const [search, setSearch] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [mostrarSinCoords, setMostrarSinCoords] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [successMsg, setSuccessMsg] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Ruta acumulada (se van stackeando pedidos) ─────────────────────────────
@@ -342,10 +346,11 @@ export default function CrearRutaScreen() {
       const conCoords = todos.filter((p) => p.tiene_coordenadas);
       const sinCoordsRuta = todos.filter((p) => !p.tiene_coordenadas);
       const optimizada = [...ordenarPorCercania(conCoords), ...sinCoordsRuta];
-      Alert.alert(
-        "✓ Agregados",
-        `${sinDuplicar.length} pedido${sinDuplicar.length > 1 ? "s" : ""} agregado${sinDuplicar.length > 1 ? "s" : ""}. Total en ruta: ${optimizada.length}`,
-      );
+      
+      setSuccessMsg(`${sinDuplicar.length} agregado${sinDuplicar.length > 1 ? "s" : ""}`);
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 1200);
+
       return optimizada;
     });
     setSelected(new Set());
@@ -567,6 +572,20 @@ export default function CrearRutaScreen() {
           </View>
         </View>
       )}
+      <Modal visible={showSuccess} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <BlurView intensity={Platform.OS === 'ios' ? 40 : 100} tint="dark" style={StyleSheet.absoluteFill} />
+          <Animated.View style={styles.successModal}>
+            <LottieView
+              source={require("@/assets/animations/success.json")}
+              autoPlay
+              loop={false}
+              style={{ width: 140, height: 140 }}
+            />
+            <Text style={styles.successText}>{successMsg}</Text>
+          </Animated.View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -698,4 +717,29 @@ const styles = StyleSheet.create({
   },
   rutaChipText: { flex: 1, fontSize: 13, fontWeight: "600" },
   rutaChipX: { padding: 2 },
+
+  // Success Modal
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.1)",
+  },
+  successModal: {
+    width: 200,
+    height: 180,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 0,
+  },
+  successText: {
+    fontSize: 20,
+    fontWeight: "800",
+    letterSpacing: -0.5,
+    color: "#fff",
+    marginTop: -10,
+    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
 });

@@ -9,14 +9,14 @@ import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useRef, useState } from "react";
 import {
-    Animated,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Animated,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 export default function HomeScreen() {
@@ -372,7 +372,7 @@ export default function HomeScreen() {
       {/* Footer - Always at bottom */}
       <View style={[styles.footerContainer, { borderTopColor: colors.border }]}>
         <Text style={[styles.footer, { color: colors.textTertiary }]}>
-          KRKN WMS v1.0.0
+          KRKN WMS v1.1.2
         </Text>
       </View>
 

@@ -117,6 +117,16 @@ function handleNotificationNavigation(data: Record<string, any>) {
       }
     }, 800);
   }
+
+  if (data?.type === "solicitud_aprobacion") {
+    setTimeout(() => {
+      console.log("[PUSH] Navegando a aprobaciones de inventario, folio:", data.folio);
+      router.push({
+        pathname: "/(main)/inventarios/aplicar/aprobaciones" as any,
+        params: { folio: data.folio }
+      });
+    }, 800);
+  }
 }
 
 // ── Hook principal ──

@@ -489,10 +489,11 @@ export default function MainLayout() {
                   style={styles.menuButton}
                   activeOpacity={0.6}
                 >
-                  <Ionicons name="menu" size={22} color={colors.text} />
+                  <Ionicons name="menu" size={24} color={colors.text} />
                 </TouchableOpacity>
               ),
               headerRight: () => <AvatarDropdown />,
+              headerTitleAlign: "center",
             }}
           >
             <Stack.Screen name="index" options={{ title: "Home" }} />
